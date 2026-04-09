@@ -1,0 +1,57 @@
+C:\Users\sbestha\Downloads\fct-hrms-project1\node_modules\pg-pool\index.js:45
+    Error.captureStackTrace(err)
+          ^
+
+error: database "fct_hrms " does not exist
+    at C:\Users\sbestha\Downloads\fct-hrms-project1\node_modules\pg-pool\index.js:45:11
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async <anonymous> (C:\Users\sbestha\Downloads\fct-hrms-project1\node_modules\src\node-postgres\session.ts:104:19)
+    at async AuthStorage.upsertUser (C:\Users\sbestha\Downloads\fct-hrms-project1\server\replit_integrations\auth\storage.ts:19:20)
+    at async setupAuth (C:\Users\sbestha\Downloads\fct-hrms-project1\server\replit_integrations\auth\replitAuth.ts:88:5)
+    at async <anonymous> (C:\Users\sbestha\Downloads\fct-hrms-project1\server\index.ts:66:3) {
+  length: 95,
+  severity: 'FATAL',
+  code: '3D000',
+  detail: undefined,
+  hint: undefined,
+  position: undefined,
+  internalPosition: undefined,
+  internalQuery: undefined,
+  where: undefined,
+  schema: undefined,
+  table: undefined,
+  column: undefined,
+  dataType: undefined,
+  constraint: undefined,
+  file: 'postinit.c',
+  line: '1016',
+  routine: 'InitPostgres'
+}
+
+Node.js v24.12.0
+
+Running in LOCAL DEV mode - auto-login enabled
+node:events:486CRET=fct-hrms-secret-key-2024" && npx tsx server/index.ts
+      throw er; // Unhandled 'error' event
+      ^
+
+Error: listen ENOTSUP: operation not supported on socket 0.0.0.0:5000
+    at Server.setupListenHandle [as _listen2] (node:net:1918:21)
+    at listenInCluster (node:net:1997:12)
+    at node:net:2206:7
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21)
+Emitted 'error' event on Server instance at:
+    at emitErrorNT (node:net:1976:8)
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  code: 'ENOTSUP',
+  errno: -4049,
+  syscall: 'listen',
+  address: '0.0.0.0',
+  port: 5000
+}
+
+Node.js v24.12.0
+
+C:\Users\sbestha\Downloads\fct-hrms-project1>
+
+

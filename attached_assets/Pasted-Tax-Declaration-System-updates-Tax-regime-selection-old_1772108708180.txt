@@ -1,0 +1,57 @@
+Tax Declaration System updates:
+Tax regime selection (old vs new) currently locked after submission, need a flow to request for
+Need unlock feature for payroll team to enable changes post-submission
+Tax declaration workflow
+Auto-capture from payroll for PF contributions and other deductions
+HRA calculation parameters
+Auto-calculate from salary structure
+Currently not dynamically updating with salary structure changes
+Payroll Management Issues
+Need option to search for employee by:
+Employee code
+Employee name
+Email address
+Payroll run screen
+Remarks should be mandatory
+System should show error when uploading without remarks
+Error message: “remarks empty”
+Payslip Module Corrections
+Remove remarks from payslip display
+Should stay as internal log only
+Remove LOP deduction amount from payslip
+Payslip main screen not updating according to salary structure or latest payroll.
+Combine CTC fields format:
+Current: separate CTC monthly & CTC annual
+Required: “CTC(monthly)/CTC annual = Rs. 10,00,000/Rs. 83,333”
+Change company name to “FC TECNRGY PVT LTD (FCT)”
+Birthday allowance amount corrections
+Should not show under ‘Gross’ column
+Only display under ‘Actual’ column
+Insurance premium integration
+Should auto-capture from insurance module
+Remove manual entry option from payroll run
+Print format showing inaccurate calculations
+Gross vs actual salary discrepancies identified
+Working days calculation
+Should include all days except unpaid leave
+Saturday, Sunday, holidays are paid leave
+Total days vs working days display incorrect
+Payroll Calculation Fixes
+Working days calculation
+Should include all days except unpaid leave
+Saturday, Sunday, holidays are paid leave
+Total days vs working days display incorrect
+Deduction auto capture/calculate
+Auto-calculate: EPF, TDS from salary structure an show in payslip directly.
+Auto-capture: Insurance premiums from insurance-module in payslip directly
+Advance & Loans Module Requirements
+Employee loan amount tracking
+Eligibility amount calculation (months basis, eg. 3 months salary as loan amount)
+Advance is for early salary (1 month, 2 month…)
+Repayment months configuration
+Module visibility
+Only show to employees with active loans/advances
+Application process
+Option for employees to apply for loans/advances
+Foreclosure functionality
+Policy documentation to be received from FCT for further clarity

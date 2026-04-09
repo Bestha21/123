@@ -1,0 +1,90 @@
+import nodemailer from "nodemailer";
+
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST || "smtp.gmail.com",
+  port: parseInt(process.env.SMTP_PORT || "587"),
+  secure: process.env.SMTP_SECURE === "true",
+  auth: {
+    user: 'mailhrmstest@gmail.com'
+	//process.env.SMTP_USER,
+    pass: 'Bestha@03',
+  },
+});
+
+export async function sendOnboardingEmail(
+  to: string,
+  employeeName: string,
+  signupUrl: string,
+  designation: string,
+  joinDate: string
+): Promise<boolean> {
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.log("SMTP not configured. Email would be sent to:", to);
+    console.log("Onboarding URL:", signupUrl);
+    return false;
+  }
+
+  const mailOptions = {
+    from: 'mailhrmstest@gmail.com' ,
+    to,
+    subject: "Welcome to FCT Energy - Complete Your Onboarding",
+    html: `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <style>
+          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+          .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+          .header { background: linear-gradient(135deg, #16a34a, #15803d); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }
+          .content { background: #f9fafb; padding: 30px; border: 1px solid #e5e7eb; }
+          .button { display: inline-block; background: #16a34a; color: white; padding: 14px 28px; text-decoration: none; border-radius: 6px; font-weight: bold; margin: 20px 0; }
+          .footer { background: #f3f4f6; padding: 20px; text-align: center; font-size: 12px; color: #6b7280; border-radius: 0 0 8px 8px; }
+          .details { background: white; padding: 15px; border-radius: 6px; margin: 15px 0; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <h1>Welcome to FCT Energy!</h1>
+          </div>
+          <div class="content">
+            <p>Dear ${employeeName},</p>
+            <p>We are excited to have you join our team! Please complete your onboarding process by clicking the button below.</p>
+            
+            <div class="details">
+              <p><strong>Position:</strong> ${designation}</p>
+              <p><strong>Start Date:</strong> ${joinDate}</p>
+            </div>
+            
+            <p>You will need to:</p>
+            <ul>
+              <li>Provide your personal information</li>
+              <li>Upload required documents (ID proof, address proof, etc.)</li>
+              <li>Review and submit your details</li>
+            </ul>
+            
+            <center>
+              <a href="${signupUrl}" class="button">Complete Your Onboarding</a>
+            </center>
+            
+            <p style="font-size: 12px; color: #6b7280;">This link is valid for 7 days. If you have any questions, please contact HR.</p>
+          </div>
+          <div class="footer">
+            <p>FCT Energy - People Management System</p>
+            <p>This is an automated message. Please do not reply directly to this email.</p>
+          </div>
+        </div>
+      </body>
+      </html>
+    `,
+  };
+
+  try {
+    await transporter.sendMail(mailOptions);
+    console.log("Onboarding email sent to:", to);
+    return true;
+  } catch (error) {
+    console.error("Failed to send email:", error);
+    return false;
+  }
+}
