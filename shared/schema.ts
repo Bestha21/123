@@ -265,7 +265,7 @@ export const leaveRequests = pgTable("leave_requests", {
   reason: text("reason"),
   medicalCertificateUrl: text("medical_certificate_url"),
   status: text("status").default("pending"),
-  approvedBy: integer("approved_by"),
+  approvedBy: text("approved_by"),
   approvedAt: timestamp("approved_at"),
   remarks: text("remarks"),
   cancelledAt: timestamp("cancelled_at"),
