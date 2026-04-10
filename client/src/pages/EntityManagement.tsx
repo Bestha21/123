@@ -87,7 +87,7 @@ export default function EntityManagement() {
     }
   };
 
-  const EntityForm = () => (
+  const entityFormJSX = (
     <form onSubmit={handleSubmit} className="space-y-4 max-h-[70vh] overflow-y-auto pr-2">
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -222,7 +222,7 @@ export default function EntityManagement() {
             <DialogHeader>
               <DialogTitle>Add New Entity</DialogTitle>
             </DialogHeader>
-            <EntityForm />
+            {entityFormJSX}
           </DialogContent>
         </Dialog>
       </div>
@@ -290,7 +290,7 @@ export default function EntityManagement() {
           <DialogHeader>
             <DialogTitle>Edit Entity - {editEntity?.name}</DialogTitle>
           </DialogHeader>
-          <EntityForm />
+          {entityFormJSX}
         </DialogContent>
       </Dialog>
     </div>

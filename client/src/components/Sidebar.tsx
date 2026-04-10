@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, createContext, useContext } from "react";
 import { Link, useLocation } from "wouter";
 import { 
   LayoutDashboard, 
@@ -35,13 +35,35 @@ import {
   BookOpen,
   Clock,
   Layers,
-  ChevronDown
+  ChevronDown,
+  Menu,
+  X
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import type { Employee } from "@shared/schema";
 import { useEntity } from "@/lib/entityContext";
 import fctLogo from "@assets/666a77510ae0e39bca9c24bb_FCT_logo_1766262033443.png";
+
+const SidebarContext = createContext<{ isOpen: boolean; setIsOpen: (v: boolean) => void }>({ isOpen: false, setIsOpen: () => {} });
+export function useSidebar() { return useContext(SidebarContext); }
+export function SidebarProvider({ children }: { children: React.ReactNode }) {
+  const [isOpen, setIsOpen] = useState(false);
+  return <SidebarContext.Provider value={{ isOpen, setIsOpen }}>{children}</SidebarContext.Provider>;
+}
+
+export function MobileHeader() {
+  const { setIsOpen } = useSidebar();
+  return (
+    <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3">
+      <button onClick={() => setIsOpen(true)} className="p-1.5 rounded-lg hover:bg-slate-100" data-testid="button-mobile-menu">
+        <Menu className="w-5 h-5 text-slate-700" />
+      </button>
+      <img src={fctLogo} alt="FCT Energy" className="h-7 w-auto" />
+      <span className="font-bold text-sm text-slate-800">People Management</span>
+    </div>
+  );
+}
 
 export function Sidebar() {
   const [location] = useLocation();
@@ -203,9 +225,22 @@ export function Sidebar() {
     </div>
   );
 
+  const { isOpen, setIsOpen } = useSidebar();
+
+  useEffect(() => {
+    setIsOpen(false);
+  }, [location]);
+
   return (
-    <aside className="w-64 bg-white border-r border-slate-200 h-screen flex flex-col fixed left-0 top-0 z-30">
+    <>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsOpen(false)} />
+      )}
+      <aside className={`w-64 bg-white border-r border-slate-200 h-screen flex flex-col fixed left-0 top-0 z-50 transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:z-30`}>
       <div className="p-4 border-b border-slate-100 flex items-center gap-3">
+        <button onClick={() => setIsOpen(false)} className="lg:hidden p-1 rounded-lg hover:bg-slate-100 mr-1" data-testid="button-close-sidebar">
+          <X className="w-5 h-5 text-slate-500" />
+        </button>
         {(() => {
           const selectedEntity = entities.find(e => e.id === selectedEntityId);
           const showLogo = !selectedEntity || selectedEntity.logoUrl;
@@ -315,5 +350,6 @@ export function Sidebar() {
         </button>
       </div>
     </aside>
+    </>
   );
 }

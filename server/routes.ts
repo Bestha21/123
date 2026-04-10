@@ -3056,12 +3056,68 @@ export async function registerRoutes(
 
       await storage.deletePayrollByMonthForEmployees(month, year, employeeIds);
 
-      const allEmployees = await storage.getEmployees();
-      const salaryStructuresList = await storage.getSalaryStructures();
-      const selectedEmployees = allEmployees.filter(e => employeeIds.includes(e.id));
+      const [allEmployees, salaryStructuresList, allApprovedLoans, allPtRules, allLwfRules, allApprovedOT, allTaxDeclarations] = await Promise.all([
+        storage.getEmployees(),
+        storage.getSalaryStructures(),
+        storage.getLoans(undefined, 'approved'),
+        storage.getPtRules(),
+        storage.getLwfRules(),
+        storage.getOvertimeRequests({ status: 'approved' }),
+        storage.getTaxDeclarations(),
+      ]);
+      const selectedEmployees = allEmployees.filter(e => employeeIds.includes(e.id) && e.status !== 'on_hold');
+
+      const loansByEmployee = new Map<number, typeof allApprovedLoans>();
+      for (const loan of allApprovedLoans) {
+        if (!loansByEmployee.has(loan.employeeId)) loansByEmployee.set(loan.employeeId, []);
+        loansByEmployee.get(loan.employeeId)!.push(loan);
+      }
+
+      const ptRulesByState = new Map<string, typeof allPtRules>();
+      for (const rule of allPtRules) {
+        if (!ptRulesByState.has(rule.state)) ptRulesByState.set(rule.state, []);
+        ptRulesByState.get(rule.state)!.push(rule);
+      }
+
+      const lwfRulesByState = new Map<string, typeof allLwfRules>();
+      for (const rule of allLwfRules) {
+        if (!lwfRulesByState.has(rule.state)) lwfRulesByState.set(rule.state, []);
+        lwfRulesByState.get(rule.state)!.push(rule);
+      }
+
+      const otByEmployee = new Map<number, typeof allApprovedOT>();
+      for (const ot of allApprovedOT) {
+        if (!otByEmployee.has(ot.employeeId)) otByEmployee.set(ot.employeeId, []);
+        otByEmployee.get(ot.employeeId)!.push(ot);
+      }
+
+      const fyMonth = parseInt(month);
+      const fyYear = year;
+      const fy = fyMonth >= 4
+        ? `${fyYear}-${(fyYear + 1).toString().slice(2)}`
+        : `${fyYear - 1}-${fyYear.toString().slice(2)}`;
+      const taxDeclByEmployee = new Map<number, typeof allTaxDeclarations>();
+      for (const dec of allTaxDeclarations) {
+        if (dec.financialYear === fy) {
+          if (!taxDeclByEmployee.has(dec.employeeId)) taxDeclByEmployee.set(dec.employeeId, []);
+          taxDeclByEmployee.get(dec.employeeId)!.push(dec);
+        }
+      }
 
       const daysInMonth = new Date(year, parseInt(month), 0).getDate();
       const records: any[] = [];
+
+      const ageBasedSlabs = [
+        { minAge: 0, maxAge: 18, employerShare: 243, employeeShare: 162 },
+        { minAge: 19, maxAge: 35, employerShare: 288, employeeShare: 192 },
+        { minAge: 36, maxAge: 45, employerShare: 315, employeeShare: 210 },
+        { minAge: 46, maxAge: 55, employerShare: 481, employeeShare: 320 },
+        { minAge: 56, maxAge: 60, employerShare: 740, employeeShare: 493 },
+        { minAge: 61, maxAge: 65, employerShare: 1002, employeeShare: 668 },
+        { minAge: 66, maxAge: 70, employerShare: 1178, employeeShare: 785 },
+        { minAge: 71, maxAge: 75, employerShare: 1388, employeeShare: 925 },
+        { minAge: 76, maxAge: 90, employerShare: 1597, employeeShare: 1065 },
+      ];
 
       for (const emp of selectedEmployees) {
         const empData = deductions?.[emp.id] || {};
@@ -3100,17 +3156,6 @@ export async function registerRoutes(
         const earningsRemarks = earnings.remarks || "";
 
         let insurancePremium = 0;
-        const ageBasedSlabs = [
-          { minAge: 0, maxAge: 18, employerShare: 243, employeeShare: 162 },
-          { minAge: 19, maxAge: 35, employerShare: 288, employeeShare: 192 },
-          { minAge: 36, maxAge: 45, employerShare: 315, employeeShare: 210 },
-          { minAge: 46, maxAge: 55, employerShare: 481, employeeShare: 320 },
-          { minAge: 56, maxAge: 60, employerShare: 740, employeeShare: 493 },
-          { minAge: 61, maxAge: 65, employerShare: 1002, employeeShare: 668 },
-          { minAge: 66, maxAge: 70, employerShare: 1178, employeeShare: 785 },
-          { minAge: 71, maxAge: 75, employerShare: 1388, employeeShare: 925 },
-          { minAge: 76, maxAge: 90, employerShare: 1597, employeeShare: 1065 },
-        ];
         if (emp.dateOfBirth || emp.actualDateOfBirth) {
           const dob = new Date(emp.actualDateOfBirth || emp.dateOfBirth!);
           const today = new Date();
@@ -3124,13 +3169,11 @@ export async function registerRoutes(
         }
 
         let advanceAmt = 0;
-        try {
-          const empLoans = await storage.getLoans(emp.id, 'approved');
-          const activeLoans = empLoans.filter((l: any) => Number(l.remainingBalance) > 0);
-          for (const loan of activeLoans) {
-            advanceAmt += Number(loan.emiAmount) || 0;
-          }
-        } catch (e) {}
+        const empLoans = loansByEmployee.get(emp.id) || [];
+        const activeLoans = empLoans.filter((l: any) => Number(l.remainingBalance) > 0);
+        for (const loan of activeLoans) {
+          advanceAmt += Number(loan.emiAmount) || 0;
+        }
 
         const otherDeduction = Number(deds.otherDeduction) || 0;
         const deductionsRemarks = deds.remarks || "";
@@ -3142,37 +3185,29 @@ export async function registerRoutes(
 
         let ptAmount = Number(deds.professionalTax) || 0;
         if (ptAmount === 0 && emp.state) {
-          try {
-            const ptStateRules = await storage.getPtRules(emp.state);
-            const activeRules = ptStateRules.filter(r => r.isActive);
-            for (const rule of activeRules) {
-              if (grossMonthly >= Number(rule.slabFrom) && grossMonthly <= Number(rule.slabTo)) {
-                ptAmount = Number(rule.ptAmount);
-                break;
-              }
+          const ptStateRules = ptRulesByState.get(emp.state) || [];
+          const activeRules = ptStateRules.filter(r => r.isActive);
+          for (const rule of activeRules) {
+            if (grossMonthly >= Number(rule.slabFrom) && grossMonthly <= Number(rule.slabTo)) {
+              ptAmount = Number(rule.ptAmount);
+              break;
             }
-          } catch (e: any) {
-            console.error(`[Payroll] PT rules lookup error for ${emp.employeeCode}:`, e?.message);
           }
         }
 
         let lwfAmount = Number(deds.lwf) || 0;
         if (lwfAmount === 0 && emp.state) {
-          try {
-            const lwfStateRules = await storage.getLwfRules(emp.state);
-            const activeRule = lwfStateRules.find(r => r.isActive);
-            if (activeRule) {
-              const months = (activeRule.applicableMonths || "").split(",").map(m => m.trim());
-              const currentMonth = parseInt(month);
-              if (months.includes(String(currentMonth)) || activeRule.frequency === "monthly") {
-                const threshold = Number(activeRule.grossSalaryThreshold) || 0;
-                if (threshold === 0 || grossMonthly <= threshold) {
-                  lwfAmount = Number(activeRule.employeeContribution);
-                }
+          const lwfStateRules = lwfRulesByState.get(emp.state) || [];
+          const activeRule = lwfStateRules.find(r => r.isActive);
+          if (activeRule) {
+            const months = (activeRule.applicableMonths || "").split(",").map(m => m.trim());
+            const currentMonth = parseInt(month);
+            if (months.includes(String(currentMonth)) || activeRule.frequency === "monthly") {
+              const threshold = Number(activeRule.grossSalaryThreshold) || 0;
+              if (threshold === 0 || grossMonthly <= threshold) {
+                lwfAmount = Number(activeRule.employeeContribution);
               }
             }
-          } catch (e: any) {
-            console.error(`[Payroll] LWF rules lookup error for ${emp.employeeCode}:`, e?.message);
           }
         }
 
@@ -3181,7 +3216,68 @@ export async function registerRoutes(
           const annualGross = grossMonthly * 12;
           const annualEPF = epf * 12;
           const annualPT = ptAmount * 12;
-          incomeTax = await calculateMonthlyTDS(emp, annualGross, annualEPF, annualPT, storage, parseInt(month), year);
+
+          const regime = (emp.taxRegime || "new").toLowerCase();
+          const declarations = taxDeclByEmployee.get(emp.id) || [];
+          const approved = declarations.filter((d: any) => d.status === "approved" || d.status === "submitted");
+          const normalize = (s: string) => s.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+          const sectionTotals: Record<string, number> = {};
+          for (const dec of approved) {
+            const key = normalize(dec.section || "");
+            if (!sectionTotals[key]) sectionTotals[key] = 0;
+            sectionTotals[key] += Number(dec.amount) || 0;
+          }
+          const get = (...keys: string[]) => {
+            for (const k of keys) {
+              const val = sectionTotals[normalize(k)];
+              if (val) return val;
+            }
+            return 0;
+          };
+
+          if (regime === "old") {
+            const standardDeduction = 50000;
+            const sec80C = Math.min(get("80C") + annualEPF, 150000);
+            const sec80D = Math.min(get("80D"), 75000);
+            const sec80CCD1B = Math.min(get("80CCD1B"), 50000);
+            const sec80CCD2 = get("80CCD2");
+            const sec24b = Math.min(get("24b", "24"), 200000);
+            const sec80E = get("80E");
+            const sec80G = get("80G");
+            const sec80EE = Math.min(get("80EE"), 150000);
+            const sec80TTA = Math.min(get("80TTA"), 10000);
+            const sec80U = Math.min(get("80U"), 125000);
+            const sec80DD = Math.min(get("80DD"), 125000);
+            const sec80DDB = Math.min(get("80DDB"), 100000);
+            const hraDeduction = Math.min(get("HRA"), 240000);
+            const totalExemptions = standardDeduction + sec80C + sec80D + sec80CCD1B + sec80CCD2 +
+              sec24b + sec80E + sec80G + sec80EE + sec80TTA + sec80U + sec80DD + sec80DDB + hraDeduction + annualPT;
+            const taxableIncome = Math.max(0, annualGross - totalExemptions);
+            let tax = 0;
+            if (taxableIncome <= 250000) tax = 0;
+            else if (taxableIncome <= 500000) tax = (taxableIncome - 250000) * 0.05;
+            else if (taxableIncome <= 1000000) tax = 12500 + (taxableIncome - 500000) * 0.20;
+            else tax = 12500 + 100000 + (taxableIncome - 1000000) * 0.30;
+            if (taxableIncome <= 500000) tax = 0;
+            tax = tax + (tax * 0.04);
+            incomeTax = Math.round(tax / 12);
+          } else {
+            const standardDeduction = 75000;
+            const sec80CCD2 = get("80CCD2");
+            const totalExemptions = standardDeduction + sec80CCD2;
+            const taxableIncome = Math.max(0, annualGross - totalExemptions);
+            let tax = 0;
+            if (taxableIncome <= 400000) tax = 0;
+            else if (taxableIncome <= 800000) tax = (taxableIncome - 400000) * 0.05;
+            else if (taxableIncome <= 1200000) tax = 20000 + (taxableIncome - 800000) * 0.10;
+            else if (taxableIncome <= 1600000) tax = 60000 + (taxableIncome - 1200000) * 0.15;
+            else if (taxableIncome <= 2000000) tax = 120000 + (taxableIncome - 1600000) * 0.20;
+            else if (taxableIncome <= 2400000) tax = 200000 + (taxableIncome - 2000000) * 0.25;
+            else tax = 300000 + (taxableIncome - 2400000) * 0.30;
+            if (taxableIncome <= 1200000) tax = 0;
+            tax = tax + (tax * 0.04);
+            incomeTax = Math.round(tax / 12);
+          }
         } catch (e) {
           incomeTax = 0;
         }
@@ -3189,18 +3285,16 @@ export async function registerRoutes(
         const totalDeductions = insurancePremium + incomeTax + advanceAmt + otherDeduction + epf + ptAmount + lwfAmount;
 
         let overtimePay = 0;
-        try {
-          const otRequests = await storage.getOvertimeRequests({ employeeId: emp.id, status: 'approved' });
-          const monthOT = otRequests.filter((r: any) => {
-            const d = new Date(r.date);
-            return d.getMonth() + 1 === parseInt(month) && d.getFullYear() === year;
-          });
-          const totalOTHours = monthOT.reduce((sum: number, r: any) => sum + parseFloat(r.overtimeHours || '0'), 0);
-          if (totalOTHours > 0) {
-            const hourlyRate = grossMonthly / 26 / 9;
-            overtimePay = Math.round(totalOTHours * hourlyRate * 1.5);
-          }
-        } catch (e) {}
+        const empOT = otByEmployee.get(emp.id) || [];
+        const monthOT = empOT.filter((r: any) => {
+          const d = new Date(r.date);
+          return d.getMonth() + 1 === parseInt(month) && d.getFullYear() === year;
+        });
+        const totalOTHours = monthOT.reduce((sum: number, r: any) => sum + parseFloat(r.overtimeHours || '0'), 0);
+        if (totalOTHours > 0) {
+          const hourlyRate = grossMonthly / 26 / 9;
+          overtimePay = Math.round(totalOTHours * hourlyRate * 1.5);
+        }
 
         const perDaySalary = grossMonthly / daysInMonth;
         const lopDeduction = parseFloat((perDaySalary * lop).toFixed(2));

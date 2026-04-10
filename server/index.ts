@@ -1150,6 +1150,13 @@ app.use((req, res, next) => {
   });
 
   console.log("[STARTUP] Phase: about to listen on port", port);
+  console.log("[STARTUP] SMTP config:", {
+    host: process.env.SMTP_HOST || "NOT SET",
+    port: process.env.SMTP_PORT || "NOT SET",
+    user: process.env.SMTP_USER || "NOT SET",
+    from: process.env.SMTP_FROM || "NOT SET",
+    passSet: !!process.env.SMTP_PASS,
+  });
   httpServer.listen({ port, host: "0.0.0.0" }, () => {
     log(`serving on port ${port}`);
   });

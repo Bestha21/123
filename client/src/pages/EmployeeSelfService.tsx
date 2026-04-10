@@ -924,15 +924,15 @@ export default function EmployeeSelfService() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-start justify-between flex-wrap gap-4">
+    <div className="space-y-4 sm:space-y-6 max-w-full overflow-hidden pb-16 sm:pb-0">
+      <div className="flex items-start justify-between flex-wrap gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Employee Self Service</h1>
-          <p className="text-sm text-muted-foreground">Manage your HR activities and complete onboarding</p>
-          <p className="text-muted-foreground mt-1">Welcome, {user?.firstName || 'Employee'}</p>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Employee Self Service</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">Manage your HR activities and complete onboarding</p>
+          <p className="text-muted-foreground mt-1 text-sm">Welcome, {user?.firstName || 'Employee'}</p>
         </div>
         {currentEmployee && !currentEmployee.attendanceExempt && (
-          <div className="flex gap-3 items-center">
+          <div className="hidden sm:flex gap-3 items-center">
             {(!todayLog || todayLog.checkOut) && (
               <Button
                 className="bg-green-600 hover:bg-green-700"
@@ -959,35 +959,74 @@ export default function EmployeeSelfService() {
         )}
       </div>
 
+      {currentEmployee && !currentEmployee.attendanceExempt && (
+        <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 p-3 flex items-center justify-between shadow-lg" data-testid="mobile-attendance-bar">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-muted-foreground truncate">
+              {todayLog?.checkIn
+                ? `In: ${format(new Date(todayLog.checkIn), 'hh:mm a')}${todayLog.checkOut ? ` · Out: ${format(new Date(todayLog.checkOut), 'hh:mm a')}` : ' · Working...'}`
+                : 'Not checked in yet'}
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0 ml-2">
+            {(!todayLog || todayLog.checkOut) && (
+              <Button
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-sm px-4"
+                onClick={() => checkInMutation.mutate()}
+                disabled={checkInMutation.isPending}
+                data-testid="button-ess-check-in-mobile"
+              >
+                <LogIn className="w-4 h-4 mr-1.5" />
+                {checkInMutation.isPending ? 'Checking In...' : 'Check In'}
+              </Button>
+            )}
+            {todayLog && todayLog.checkIn && !todayLog.checkOut && (
+              <Button
+                size="sm"
+                className="bg-red-600 hover:bg-red-700 text-sm px-4"
+                onClick={() => checkOutMutation.mutate()}
+                disabled={checkOutMutation.isPending}
+                data-testid="button-ess-check-out-mobile"
+              >
+                <LogOut className="w-4 h-4 mr-1.5" />
+                {checkOutMutation.isPending ? 'Checking Out...' : 'Check Out'}
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
       <Card className="bg-gradient-to-r from-primary to-primary/80 text-primary-foreground">
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-6 flex-wrap">
-            <div className="w-20 h-20 rounded-full bg-white/20 flex items-center justify-center text-3xl font-bold">
+        <CardContent className="pt-4 sm:pt-6 px-3 sm:px-6">
+          <div className="flex flex-col sm:flex-row items-center sm:items-center gap-3 sm:gap-6">
+            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-white/20 flex items-center justify-center text-2xl sm:text-3xl font-bold shrink-0">
               {user?.firstName?.[0] || 'E'}{user?.lastName?.[0] || 'S'}
             </div>
-            <div className="flex-1 min-w-[200px]">
-              <h2 className="text-xl font-bold">{user?.firstName} {user?.lastName || ''}</h2>
-              <p className="text-primary-foreground/80">{user?.email}</p>
+            <div className="flex-1 min-w-0 text-center sm:text-left">
+              <h2 className="text-lg sm:text-xl font-bold">{user?.firstName} {user?.lastName || ''}</h2>
+              <p className="text-primary-foreground/80 text-xs sm:text-sm truncate">{user?.email}</p>
               {currentEmployee && (
-                <div className="flex items-center gap-3 mt-2 flex-wrap text-sm text-primary-foreground/80">
+                <div className="flex items-center gap-2 sm:gap-3 mt-2 flex-wrap justify-center sm:justify-start text-xs sm:text-sm text-primary-foreground/80">
                   <span className="flex items-center gap-1" data-testid="ess-emp-code">
-                    <Badge variant="outline" className="border-white/30 text-primary-foreground text-xs">
+                    <Badge variant="outline" className="border-white/30 text-primary-foreground text-[10px] sm:text-xs">
                       {currentEmployee.employeeCode || 'Code N/A'}
                     </Badge>
                   </span>
                   <span className="flex items-center gap-1" data-testid="ess-phone">
-                    <Phone className="w-3.5 h-3.5" />
-                    {currentEmployee.phone || 'Phone not set'}
+                    <Phone className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+                    <span className="hidden sm:inline">{currentEmployee.phone || 'Phone not set'}</span>
+                    <span className="sm:hidden">{currentEmployee.phone || 'N/A'}</span>
                   </span>
                   <span className="flex items-center gap-1" data-testid="ess-department">
-                    <Building2 className="w-3.5 h-3.5" />
+                    <Building2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                     {(currentEmployee.departmentId && departments?.find(d => d.id === currentEmployee.departmentId)?.name) || 'Dept not set'}
                   </span>
-                  <span className="flex items-center gap-1" data-testid="ess-designation">
+                  <span className="flex items-center gap-1 hidden sm:flex" data-testid="ess-designation">
                     <Briefcase className="w-3.5 h-3.5" />
                     {currentEmployee.designation || 'Designation not set'}
                   </span>
-                  <span className="flex items-center gap-1" data-testid="ess-reporting-manager">
+                  <span className="flex items-center gap-1 hidden sm:flex" data-testid="ess-reporting-manager">
                     <Users className="w-3.5 h-3.5" />
                     RM: {currentEmployee.reportingManagerId ? (() => {
                       const rmId = String(currentEmployee.reportingManagerId).trim();
@@ -1000,22 +1039,22 @@ export default function EmployeeSelfService() {
                   </span>
                 </div>
               )}
-              <div className="flex items-center gap-4 mt-2 flex-wrap">
+              <div className="flex items-center gap-4 mt-2 flex-wrap justify-center sm:justify-start">
                 {currentEmployee?.status === 'active' && !onboardingTasksData?.length ? (
                   <Badge className="bg-white/20 text-primary-foreground">Active</Badge>
                 ) : onboardingTasksData && onboardingTasksData.length > 0 ? (
                   <>
                     <Badge className="bg-white/20 text-primary-foreground">New Joiner</Badge>
-                    <span className="text-sm text-primary-foreground/70">Onboarding: {onboardingProgress}% Complete</span>
+                    <span className="text-xs sm:text-sm text-primary-foreground/70">Onboarding: {onboardingProgress}% Complete</span>
                   </>
                 ) : (
                   <Badge className="bg-white/20 text-primary-foreground">{currentEmployee?.status || 'Employee'}</Badge>
                 )}
               </div>
             </div>
-            <div className="text-right">
-              <p className="text-sm text-primary-foreground/70">Today</p>
-              <p className="text-lg font-semibold">{format(new Date(), "EEEE, MMM dd")}</p>
+            <div className="text-center sm:text-right shrink-0">
+              <p className="text-xs sm:text-sm text-primary-foreground/70">Today</p>
+              <p className="text-sm sm:text-lg font-semibold">{format(new Date(), "EEEE, MMM dd")}</p>
             </div>
           </div>
           {onboardingTasksData && onboardingTasksData.length > 0 && (
@@ -1027,25 +1066,27 @@ export default function EmployeeSelfService() {
       </Card>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="flex overflow-x-auto overflow-y-hidden h-auto gap-1 w-full scrollbar-thin">
-          <TabsTrigger value="dashboard" className="shrink-0" data-testid="tab-dashboard">Dashboard</TabsTrigger>
-          <TabsTrigger value="personal" className="shrink-0" data-testid="tab-personal">Personal Details</TabsTrigger>
-          <TabsTrigger value="documents" className="shrink-0" data-testid="tab-documents">Documents</TabsTrigger>
-          <TabsTrigger value="forms" className="shrink-0" data-testid="tab-forms">Statutory Forms</TabsTrigger>
-          <TabsTrigger value="payslips" className="shrink-0" data-testid="tab-payslips">Payslips</TabsTrigger>
-          <TabsTrigger value="tax" className="shrink-0" data-testid="tab-tax">Tax Declaration</TabsTrigger>
-          <TabsTrigger value="assets" className="shrink-0" data-testid="tab-assets">My Assets</TabsTrigger>
-          <TabsTrigger value="insurance" className="shrink-0" data-testid="tab-insurance">Insurance</TabsTrigger>
-          <TabsTrigger value="loans" className="shrink-0" data-testid="tab-loans">Loans</TabsTrigger>
-          <TabsTrigger value="expenses" className="shrink-0" data-testid="tab-expenses">Expenses</TabsTrigger>
-          <TabsTrigger value="team" className="shrink-0" data-testid="tab-team">My Team</TabsTrigger>
-          <TabsTrigger value="policies" className="shrink-0" data-testid="tab-policies">Policies</TabsTrigger>
-          <TabsTrigger value="exit" className="shrink-0" data-testid="tab-exit">Exit</TabsTrigger>
-        </TabsList>
+        <div className="-mx-2 sm:mx-0 px-2 sm:px-0 overflow-x-auto scrollbar-thin pb-1">
+          <TabsList className="inline-flex h-auto gap-1 min-w-max w-full sm:w-auto">
+            <TabsTrigger value="dashboard" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-dashboard">Dashboard</TabsTrigger>
+            <TabsTrigger value="personal" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-personal">Personal</TabsTrigger>
+            <TabsTrigger value="documents" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-documents">Documents</TabsTrigger>
+            <TabsTrigger value="forms" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-forms">Forms</TabsTrigger>
+            <TabsTrigger value="payslips" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-payslips">Payslips</TabsTrigger>
+            <TabsTrigger value="tax" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-tax">Tax</TabsTrigger>
+            <TabsTrigger value="assets" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-assets">Assets</TabsTrigger>
+            <TabsTrigger value="insurance" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-insurance">Insurance</TabsTrigger>
+            <TabsTrigger value="loans" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-loans">Loans</TabsTrigger>
+            <TabsTrigger value="expenses" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-expenses">Expenses</TabsTrigger>
+            <TabsTrigger value="team" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-team">Team</TabsTrigger>
+            <TabsTrigger value="policies" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-policies">Policies</TabsTrigger>
+            <TabsTrigger value="exit" className="shrink-0 text-xs sm:text-sm px-2 sm:px-3 py-1.5" data-testid="tab-exit">Exit</TabsTrigger>
+          </TabsList>
+        </div>
 
         <TabsContent value="dashboard">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="lg:col-span-2 space-y-4 sm:space-y-6">
               {currentEmployee && !currentEmployee.attendanceExempt && (
                 <div className="flex items-center justify-between flex-wrap gap-3">
                   <p className="text-sm text-muted-foreground">
@@ -1056,11 +1097,11 @@ export default function EmployeeSelfService() {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                      <Cake className="w-5 h-5 text-pink-500" />
+                  <CardHeader className="px-3 sm:px-6 py-3 sm:py-4">
+                    <CardTitle className="flex items-center gap-2 text-sm sm:text-base">
+                      <Cake className="w-4 h-4 sm:w-5 sm:h-5 text-pink-500" />
                       Upcoming Birthdays
                     </CardTitle>
                   </CardHeader>
@@ -1236,7 +1277,7 @@ export default function EmployeeSelfService() {
                 </CardContent>
               </Card>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
                 <Card>
                   <CardHeader>
                     <CardTitle className="flex items-center gap-2">
@@ -1307,7 +1348,7 @@ export default function EmployeeSelfService() {
             </div>
 
             <div className="lg:col-span-1">
-              <Card className="border-purple-200/50 dark:border-purple-800/50 sticky top-4">
+              <Card className="border-purple-200/50 dark:border-purple-800/50 lg:sticky lg:top-4">
                 <CardHeader className="bg-gradient-to-r from-purple-50 to-indigo-50 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-t-lg pb-3">
                   <CardTitle className="flex items-center gap-2">
                     <Users className="w-5 h-5 text-purple-500" />

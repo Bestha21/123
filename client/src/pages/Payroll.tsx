@@ -482,7 +482,8 @@ function RunPayrollDialog({ open, onClose, employees }: { open: boolean; onClose
     }, 0);
   };
 
-  const activeEmployees = employees.filter(e => e.status === 'active');
+  const payrollEligibleStatuses = ['active', 'notice_period'];
+  const activeEmployees = employees.filter(e => payrollEligibleStatuses.includes(e.status || 'active'));
 
   const filteredEmployees = activeEmployees.filter(e => {
     const name = `${e.firstName} ${e.lastName || ''} ${e.employeeCode || ''}`.toLowerCase();
@@ -551,12 +552,24 @@ function RunPayrollDialog({ open, onClose, employees }: { open: boolean; onClose
     { value: "probation", label: "Probation" },
     { value: "confirmed", label: "Confirmed" },
     { value: "probation_extension", label: "Ext. Probation" },
+    { value: "notice_period", label: "Notice Period" },
     { value: "on_hold", label: "On Hold" },
   ];
 
+  const getEffectiveStatus = (emp: Employee) => {
+    if (emp.status === 'notice_period') return 'notice_period';
+    return emp.employmentStatus || 'probation';
+  };
+
   const updateStatusMutation = useMutation({
     mutationFn: async ({ empId, status }: { empId: number; status: string }) => {
-      return apiRequest("PATCH", `/api/employees/${empId}`, { employmentStatus: status });
+      if (status === 'notice_period') {
+        return apiRequest("PATCH", `/api/employees/${empId}`, { status: 'notice_period', employmentStatus: status });
+      } else if (status === 'on_hold') {
+        return apiRequest("PATCH", `/api/employees/${empId}`, { status: 'on_hold', employmentStatus: status });
+      } else {
+        return apiRequest("PATCH", `/api/employees/${empId}`, { status: 'active', employmentStatus: status });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/employees"] });
@@ -782,9 +795,12 @@ function RunPayrollDialog({ open, onClose, employees }: { open: boolean; onClose
                     <div className="flex-1 min-w-0">
                       <span className="text-sm font-medium">{emp.firstName} {emp.lastName || ''}</span>
                       <span className="text-xs text-muted-foreground ml-2">{emp.employeeCode || ''}</span>
+                      {emp.status === 'notice_period' && (
+                        <Badge variant="outline" className="ml-2 text-[10px] border-orange-400 text-orange-600 bg-orange-50">Notice Period</Badge>
+                      )}
                     </div>
                     <Select
-                      value={emp.employmentStatus || 'probation'}
+                      value={getEffectiveStatus(emp)}
                       onValueChange={v => updateStatusMutation.mutate({ empId: emp.id, status: v })}
                     >
                       <SelectTrigger className="w-[120px] h-7 text-xs" data-testid={`select-emp-status-${emp.id}`}>
@@ -1522,10 +1538,10 @@ export default function PayrollPage() {
     const txnDate = `${dd}/${mm}/${yyyy}`;
     const selEntity = allEntities?.find(e => selectedEntityIds.length > 0 ? selectedEntityIds.includes(e.id) : true);
     const companyAccount = selEntity?.bankAccountNumber || "026384600000452";
-    const companyName = selEntity?.legalName || selEntity?.name || " FC TECNRGY PRIVATE LIMITED";
+    const companyName = "FC TECNRGY PRIVATE LIMITED";
 
     let totalAmount = 0;
-    const headerRow = `H,18/7/2023,10723385,,,,,,,,,,,,,,,,`;
+    const headerRow = `H,18/07/2023,10723385,,,,,,,,,,,,,,,,`;
 
     const detailRows = processedRecords.map((record: any, idx: number) => {
       const emp = employees?.find(e => e.id === record.employeeId);
@@ -1567,7 +1583,8 @@ export default function PayrollPage() {
       return cols.join(',');
     }).filter(Boolean);
 
-    const fileContent = [headerRow, ...detailRows].join('\n');
+    const footerRow = `F,${detailRows.length},${totalAmount.toFixed(2)},,,,,,,,,,,,,,,,`;
+    const fileContent = [headerRow, ...detailRows, footerRow].join('\n');
     const blob = new Blob([fileContent], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -1575,7 +1592,7 @@ export default function PayrollPage() {
     a.download = `YesBank_A2A_Salary_${monthLabel}_${year || new Date().getFullYear()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-    toast({ title: `Yes Bank A2A file exported for ${detailRows.length} employee(s)` });
+    toast({ title: `Yes Bank A2A file exported for ${detailRows.length} employee(s), Total: ₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` });
   };
 
   return (
