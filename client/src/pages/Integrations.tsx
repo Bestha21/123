@@ -1080,12 +1080,12 @@ export default function Integrations() {
                     <div className="flex gap-2">
                       <Input 
                         type="text"
-                        value="https://aai-nextgen.in/api/external/"
+                        value="https://hrms.kadenc.com/api/external/"
                         readOnly
                         className="font-mono text-xs bg-slate-50"
                       />
                       <Button size="icon" variant="outline" onClick={() => {
-                        navigator.clipboard.writeText('https://aai-nextgen.in/api/external/');
+                        navigator.clipboard.writeText('https://hrms.kadenc.com/api/external/');
                         toast({ title: "Base URL copied" });
                       }}>
                         <Copy className="w-4 h-4" />
