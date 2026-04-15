@@ -3597,7 +3597,7 @@ export async function registerRoutes(
     try {
       // Optimization: Only fetch ID and Email to save memory/speed
       const allEmps = await storage.getEmployees();
-      const activeEmps = allEmps.filter((e: any) => e.status === 'active' && e.email);
+      const activeEmps = allEmps.filter((e: any) => e.status === 'Active' && e.email);
       
       console.log(`Starting background broadcast to ${activeEmps.length} employees...`);
 
