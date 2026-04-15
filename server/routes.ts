@@ -307,13 +307,13 @@ export async function registerRoutes(
         "lifeInsuranceProvider", "lifeInsurancePolicyNumber", "lifeInsuranceSumInsured",
         "lifeInsuranceNomineeName", "lifeInsuranceNomineeRelation",
         "personalAccidentProvider", "personalAccidentPolicyNumber", "personalAccidentSumInsured",
-        "qualificationScore", "secondQualificationScore", "noticeBuyoutDuration",
+        "qualificationScore", "secondQualificationScore", "noticeBuyoutDuration","qualificationScore", "secondQualificationScore", "noticeBuyoutDuration", "accessRole",
       ]);
       const ALLOWED_INT_FIELDS = new Set([
         "departmentId", "entityId", "salaryStructureId", "shiftId", "projectId", "vicePresidentId", "noticeBuyoutPayments",
       ]);
       const ALLOWED_BOOL_FIELDS = new Set(["attendanceExempt"]);
-      const BLOCKED_FIELDS = new Set(["id", "accessRole", "email", "employeeCode", "password", "profileImageUrl", "createdAt", "updatedAt", "onboardingStatus"]);
+      const BLOCKED_FIELDS = new Set(["id", "email", "employeeCode", "password", "profileImageUrl", "createdAt", "updatedAt", "onboardingStatus"]);
 
       const invalidFields = fields.filter((f: string) => !ALLOWED_TEXT_FIELDS.has(f) && !ALLOWED_INT_FIELDS.has(f) && !ALLOWED_BOOL_FIELDS.has(f) && f !== matchField);
       if (invalidFields.length > 0) {
@@ -348,7 +348,7 @@ export async function registerRoutes(
           const val = row[field];
           if (val === undefined || val === null || val === "") continue;
 
-          if (ALLOWED_INT_FIELDS.has(field)) {
+         if (ALLOWED_INT_FIELDS.has(field)) {
             const parsed = parseInt(val);
             if (isNaN(parsed)) {
               errors.push(`${matchValue}: Invalid number for ${field}: "${val}"`);
@@ -358,7 +358,11 @@ export async function registerRoutes(
           } else if (ALLOWED_BOOL_FIELDS.has(field)) {
             updateData[field] = val === "true" || val === "1" || val === true;
           } else if (ALLOWED_TEXT_FIELDS.has(field)) {
-            updateData[field] = String(val).trim();
+            let textVal = String(val).trim();
+            if (field === 'accessRole') {
+              textVal = textVal.replace(/,\s*$/, '').replace(/^\s*,/, '').trim();
+            }
+            updateData[field] = textVal;
           }
         }
 
