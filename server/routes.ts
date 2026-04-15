@@ -3586,20 +3586,42 @@ export async function registerRoutes(
   });
 
   app.post(api.announcements.create.path, async (req, res) => {
-    const input = api.announcements.create.input.parse(req.body);
-    const announcement = await storage.createAnnouncement({ ...input, publishedAt: new Date() });
-    res.status(201).json(announcement);
+  const input = api.announcements.create.input.parse(req.body);
+  const announcement = await storage.createAnnouncement({ ...input, publishedAt: new Date() });
+  
+  // 1. Send success response to the admin IMMEDIATELY
+  res.status(201).json(announcement);
 
-    // Fire-and-forget: broadcast announcement to all active employees
+  // 2. Run the broadcast in the background without blocking the user
+  (async () => {
     try {
+      // Optimization: Only fetch ID and Email to save memory/speed
       const allEmps = await storage.getEmployees();
       const activeEmps = allEmps.filter((e: any) => e.status === 'active' && e.email);
+      
+      console.log(`Starting background broadcast to ${activeEmps.length} employees...`);
+
       for (const emp of activeEmps) {
-        sendAnnouncementEmail(emp.email!, input.title, input.content || '', input.priority).catch(() => {});
+        try {
+          // IMPORTANT: We MUST await here so the server doesn't 
+          // overwhelm the Gmail SMTP limits
+          await sendAnnouncementEmail(
+            emp.email!, 
+            input.title, 
+            input.content || '', 
+            input.priority
+          );
+          console.log(`Email sent to: ${emp.email}`);
+        } catch (mailErr) {
+          console.error(`Individual email failed for ${emp.email}:`, mailErr);
+        }
       }
-      console.log(`Announcement email sent to ${activeEmps.length} employees`);
-    } catch (e) { console.error("Announcement broadcast error:", e); }
-  });
+      console.log("Full broadcast completed successfully.");
+    } catch (e) {
+      console.error("Critical broadcast background error:", e);
+    }
+  })();
+});
 
   // Onboarding
   app.get(api.onboarding.list.path, async (req, res) => {
