@@ -307,13 +307,13 @@ export async function registerRoutes(
         "lifeInsuranceProvider", "lifeInsurancePolicyNumber", "lifeInsuranceSumInsured",
         "lifeInsuranceNomineeName", "lifeInsuranceNomineeRelation",
         "personalAccidentProvider", "personalAccidentPolicyNumber", "personalAccidentSumInsured",
-        "qualificationScore", "secondQualificationScore", "noticeBuyoutDuration","qualificationScore", "secondQualificationScore", "noticeBuyoutDuration", "accessRole",
+        "qualificationScore", "secondQualificationScore", "noticeBuyoutDuration","qualificationScore", "secondQualificationScore", "noticeBuyoutDuration", "accessRole", "email",
       ]);
       const ALLOWED_INT_FIELDS = new Set([
         "departmentId", "entityId", "salaryStructureId", "shiftId", "projectId", "vicePresidentId", "noticeBuyoutPayments",
       ]);
       const ALLOWED_BOOL_FIELDS = new Set(["attendanceExempt"]);
-      const BLOCKED_FIELDS = new Set(["id", "email", "employeeCode", "password", "profileImageUrl", "createdAt", "updatedAt", "onboardingStatus"]);
+      const BLOCKED_FIELDS = new Set(["id", "employeeCode", "password", "profileImageUrl", "createdAt", "updatedAt", "onboardingStatus"]);
 
       const invalidFields = fields.filter((f: string) => !ALLOWED_TEXT_FIELDS.has(f) && !ALLOWED_INT_FIELDS.has(f) && !ALLOWED_BOOL_FIELDS.has(f) && f !== matchField);
       if (invalidFields.length > 0) {
