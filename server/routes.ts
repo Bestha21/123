@@ -3586,42 +3586,27 @@ export async function registerRoutes(
   });
 
   app.post(api.announcements.create.path, async (req, res) => {
-  const input = api.announcements.create.input.parse(req.body);
-  const announcement = await storage.createAnnouncement({ ...input, publishedAt: new Date() });
-  
-  // 1. Send success response to the admin IMMEDIATELY
-  res.status(201).json(announcement);
+    const input = api.announcements.create.input.parse(req.body);
+    const announcement = await storage.createAnnouncement({ ...input, publishedAt: new Date() });
+    res.status(201).json(announcement);
 
-  // 2. Run the broadcast in the background without blocking the user
-  (async () => {
+    // Fire-and-forget: broadcast announcement to all active employees
     try {
-      // Optimization: Only fetch ID and Email to save memory/speed
       const allEmps = await storage.getEmployees();
-      const activeEmps = allEmps.filter((e: any) => e.status === 'Active' && e.email);
-      
-      console.log(`Starting background broadcast to ${activeEmps.length} employees...`);
-
-      for (const emp of activeEmps) {
-        try {
-          // IMPORTANT: We MUST await here so the server doesn't 
-          // overwhelm the Gmail SMTP limits
-          await sendAnnouncementEmail(
-            emp.email!, 
-            input.title, 
-            input.content || '', 
-            input.priority
-          );
-          console.log(`Email sent to: ${emp.email}`);
-        } catch (mailErr) {
-          console.error(`Individual email failed for ${emp.email}:`, mailErr);
-        }
-      }
-      console.log("Full broadcast completed successfully.");
-    } catch (e) {
-      console.error("Critical broadcast background error:", e);
-    }
-  })();
-});
+      const activeEmps = allEmps.filter((e: any) => e.status === 'active' && e.email);
+      let sent = 0, failed = 0;
+for (const emp of activeEmps) {
+  try {
+    const result = await sendAnnouncementEmail(emp.email!, input.title, input.content || '', input.priority);
+    if (result) { sent++; } else { failed++; console.log(`Announcement email failed for: ${emp.email}`); }
+  } catch (err: any) {
+    failed++;
+    console.error(`Announcement email error for ${emp.email}:`, err.message);
+  }
+}
+console.log(`Announcement emails: ${sent} sent, ${failed} failed out of ${activeEmps.length} active employees`);
+} catch (e) { console.error("Announcement broadcast error:", e); }
+  });
 
   // Onboarding
   app.get(api.onboarding.list.path, async (req, res) => {
