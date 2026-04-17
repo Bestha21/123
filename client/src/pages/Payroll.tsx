@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import type { Employee, Payroll, SalaryStructure } from "@shared/schema";
 import { useEntity } from "@/lib/entityContext";
+import * as XLSX from "xlsx";
 
 const MONTHS = [
   { value: "01", label: "January" },
@@ -1466,14 +1467,14 @@ export default function PayrollPage() {
     const yyyy = lastDay.getFullYear().toString();
     const txnDate = `${dd}/${mm}/${yyyy}`;
 
-    const rows = processedRecords.map((record: any) => {
+        const aoa: any[][] = processedRecords.map((record: any) => {
       const emp = employees?.find(e => e.id === record.employeeId);
       if (!emp) return null;
 
-      const netPay = Number(record.netSalary) || 0;
+      const netPay = Math.round(Number(record.netSalary) || 0);
       const beneficiaryName = `${emp.firstName} ${emp.lastName || ''}`.trim();
-      const bankName = (emp.bankName || '').toLowerCase();
-      const isHDFC = bankName.includes('hdfc');
+      const ifscCode = (emp.ifscCode || '').toUpperCase();
+      const isHDFC = ifscCode.startsWith('HDFC');
       const isConsultant = (emp.employmentType || '').toLowerCase() === 'consultant' || (emp.employmentType || '').toLowerCase() === 'contract';
 
       let txnType = 'N';
@@ -1484,36 +1485,37 @@ export default function PayrollPage() {
       }
 
       const narration = isConsultant ? 'Consultancy' : 'SalaryHDFC';
-      const accountNumber = emp.bankAccountNumber || '';
+      const accountNumber = String(emp.bankAccountNumber || '');
       const beneficiaryCode = isHDFC ? accountNumber : '';
 
-      const cols = [
+      return [
         txnType,                          // A
         beneficiaryCode,                  // B
         accountNumber,                    // C
-        netPay.toFixed(2),                // D
+        netPay,                           // D - rounded, no decimals/commas
         beneficiaryName,                  // E
         '', '', '', '', '', '', '', '',   // F-M (8 empty)
         narration,                        // N
         '', '', '', '', '', '', '', '',   // O-V (8 empty)
         txnDate,                          // W
         '',                               // X
-        emp.ifscCode || '',               // Y
+        ifscCode,                         // Y
         '', '',                           // Z-AA (2 empty)
-        emp.email || ''                   // AB
+        'ashish@fctecnrgy.com'            // AB - fixed email
       ];
-      return cols.join(',');
-    }).filter(Boolean);
+    }).filter(Boolean) as any[][];
 
-    const fileContent = rows.join('\n');
-    const blob = new Blob([fileContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `HDFC_Bank_Salary_${monthLabel}_${year || new Date().getFullYear()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: `HDFC bank template exported for ${processedRecords.length} employee(s)` });
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    aoa.forEach((_, rowIdx) => {
+      ['B', 'C'].forEach(col => {
+        const ref = `${col}${rowIdx + 1}`;
+        if (ws[ref]) { ws[ref].t = 's'; ws[ref].z = '@'; }
+      });
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'HDFC');
+    XLSX.writeFile(wb, `HDFC_Bank_Salary_${monthLabel}_${year || new Date().getFullYear()}.xlsx`);
+    toast({ title: `HDFC bank template exported for ${aoa.length} employee(s)` });
   };
 
   const handleExportYesBankTemplate = () => {
@@ -1540,20 +1542,20 @@ export default function PayrollPage() {
     const companyAccount = selEntity?.bankAccountNumber || "026384600000452";
     const companyName = "FC TECNRGY PRIVATE LIMITED";
 
-    let totalAmount = 0;
-    const headerRow = `H,18/07/2023,10723385,,,,,,,,,,,,,,,,`;
+        let totalAmount = 0;
+    const headerRow: any[] = ['H', '18/07/2023', '10723385', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
 
     const detailRows = processedRecords.map((record: any, idx: number) => {
       const emp = employees?.find(e => e.id === record.employeeId);
       if (!emp) return null;
 
-      const netPay = Number(record.netSalary) || 0;
+      const netPay = Math.round(Number(record.netSalary) || 0);
       totalAmount += netPay;
       const beneficiaryName = `${emp.firstName} ${emp.lastName || ''}`.trim();
-      const ifscCode = emp.ifscCode || '';
-      const accountNumber = emp.bankAccountNumber || '';
+      const ifscCode = (emp.ifscCode || '').toUpperCase();
+      const accountNumber = String(emp.bankAccountNumber || '');
       const bankName = (emp.bankName || '').toLowerCase();
-      const isYesBank = bankName.includes('yes');
+      const isYesBank = bankName.includes('yes') || ifscCode.startsWith('YESB');
 
       let txnType = 'N06';
       if (isYesBank) {
@@ -1565,10 +1567,10 @@ export default function PayrollPage() {
       const txnRef = `TRANS${dd}${mm}${yyyy}${String(idx + 1).padStart(2, '0')}`;
       const narration = 'SALARY';
 
-      const cols = [
+      return [
         'D',
         txnType,
-        companyAccount,
+        String(companyAccount),
         companyName,
         '', '', '',
         ifscCode,
@@ -1577,22 +1579,25 @@ export default function PayrollPage() {
         '', '', '', '',
         txnRef,
         txnDate,
-        netPay.toFixed(2),
+        netPay,
         narration
       ];
-      return cols.join(',');
-    }).filter(Boolean);
+    }).filter(Boolean) as any[][];
 
-    const footerRow = `F,${detailRows.length},${totalAmount.toFixed(2)},,,,,,,,,,,,,,,,`;
-    const fileContent = [headerRow, ...detailRows, footerRow].join('\n');
-    const blob = new Blob([fileContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `YesBank_A2A_Salary_${monthLabel}_${year || new Date().getFullYear()}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast({ title: `Yes Bank A2A file exported for ${detailRows.length} employee(s), Total: ₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}` });
+    const footerRow: any[] = ['F', detailRows.length, totalAmount, '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''];
+    const aoa: any[][] = [headerRow, ...detailRows, footerRow];
+
+    const ws = XLSX.utils.aoa_to_sheet(aoa);
+    aoa.forEach((_, rowIdx) => {
+      ['C', 'I'].forEach(col => {
+        const ref = `${col}${rowIdx + 1}`;
+        if (ws[ref]) { ws[ref].t = 's'; ws[ref].z = '@'; }
+      });
+    });
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'YesBank');
+    XLSX.writeFile(wb, `YesBank_A2A_Salary_${monthLabel}_${year || new Date().getFullYear()}.xlsx`);
+    toast({ title: `Yes Bank A2A file exported for ${detailRows.length} employee(s), Total: ₹${totalAmount.toLocaleString('en-IN')}` });
   };
 
   return (
