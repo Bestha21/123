@@ -6,16 +6,23 @@ import { fileURLToPath } from "url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export function serveStatic(app: Express) {
-  const distPath = path.resolve(__dirname, "public");
-  if (!fs.existsSync(distPath)) {
-    throw new Error(
-      `Could not find the build directory: ${distPath}, make sure to build the client first`,
-    );
+function resolvePublicDir(): string {
+  const candidates = [
+    path.resolve(__dirname, "public"),
+    path.resolve(__dirname, "..", "dist", "public"),
+    path.resolve(process.cwd(), "dist", "public"),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
   }
+  throw new Error(
+    `Could not find the build directory. Tried:\n${candidates.join("\n")}\nRun \`npm run build\` first.`,
+  );
+}
 
+export function serveStatic(app: Express) {
+  const distPath = resolvePublicDir();
   app.use(express.static(distPath));
-
   app.use("*", (_req, res) => {
     res.sendFile(path.resolve(distPath, "index.html"));
   });
