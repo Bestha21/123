@@ -36,10 +36,10 @@ import { useEssLayout, getEssLayoutOptions } from "@/lib/themeContext";
 import EmployeeSelfServiceBento from "./EmployeeSelfServiceBento";
 import { LayoutGrid, List } from "lucide-react";
 
-export default function EmployeeSelfService() {
+function EmployeeSelfServiceClassic() {
   const [essLayout, setEssLayout] = useEssLayout();
   const layoutOptions = getEssLayoutOptions();
-  if (essLayout === "bento") return <EmployeeSelfServiceBento />;
+  //if (essLayout === "bento") return <EmployeeSelfServiceBento />;
 
   const { user } = useAuth();
   const { toast } = useToast();
@@ -4641,5 +4641,10 @@ export default function EmployeeSelfService() {
       </Dialog>
     </div>
   );
+},
+export default function EmployeeSelfService() {
+  const [essLayout] = useEssLayout();
+  if (essLayout === "bento") return <EmployeeSelfServiceBento />;
+  return <EmployeeSelfServiceClassic />;
 }
 

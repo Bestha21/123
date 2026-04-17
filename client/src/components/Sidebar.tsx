@@ -2,49 +2,16 @@ import { useEffect, useState, useRef, createContext, useContext } from "react";
 import { Link, useLocation } from "wouter";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { 
-  LayoutDashboard, 
-  Users, 
-  UserPlus, 
-  ClipboardCheck, 
-  CalendarRange, 
-  DollarSign, 
-  LogOut,
-  Receipt,
-  Laptop,
-  UserX,
-  Bell,
-  Building2,
-  CalendarDays,
-  FileText,
-  Network,
-  GitBranch,
-  Contact,
-  BarChart3,
-  UserCircle,
-  FileSpreadsheet,
-  Plug,
-  Target,
-  GraduationCap,
-  Heart,
-  Plane,
-  FolderKanban,
-  Package,
-  Briefcase,
-  FileCheck,
-  Banknote,
-  Scale,
-  BookOpen,
-  Clock,
-  Layers,
-  ChevronDown,
-  Menu,
-  X
+  LayoutDashboard, Users, UserPlus, ClipboardCheck, CalendarRange, DollarSign, 
+  LogOut, Receipt, Laptop, UserX, Bell, Building2, CalendarDays, FileText, 
+  Network, GitBranch, Contact, BarChart3, UserCircle, FileSpreadsheet, Plug, 
+  Target, GraduationCap, Heart, Plane, FolderKanban, Package, Briefcase, 
+  FileCheck, Banknote, Scale, BookOpen, Clock, Layers, ChevronDown, Menu, X
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import type { Employee } from "@shared/schema";
 import { useEntity } from "@/lib/entityContext";
-import fctLogo from "@assets/666a77510ae0e39bca9c24bb_FCT_logo_1766262033443.png";
 
 const SidebarContext = createContext<{ isOpen: boolean; setIsOpen: (v: boolean) => void }>({ isOpen: false, setIsOpen: () => {} });
 export function useSidebar() { return useContext(SidebarContext); }
@@ -60,7 +27,7 @@ export function MobileHeader() {
       <button onClick={() => setIsOpen(true)} className="p-1.5 rounded-lg hover:bg-slate-100" data-testid="button-mobile-menu">
         <Menu className="w-5 h-5 text-slate-700" />
       </button>
-      <img src={fctLogo} alt="FCT Energy" className="h-7 w-auto" />
+      <span className="font-bold text-sm text-orange-600">Kadenc</span>
       <span className="font-bold text-sm text-slate-800">People Management</span>
     </div>
   );
@@ -94,7 +61,6 @@ export function Sidebar() {
 
   const currentEmployee = employees.find(e => e.email?.toLowerCase() === user?.email?.toLowerCase());
   const accessRoleString = currentEmployee?.accessRole || "employee";
-  
   const userAccessRoles = accessRoleString.split(",").map(role => role.trim().toLowerCase());
 
   const hasRole = (role: string) => userAccessRoles.includes(role);
@@ -120,9 +86,7 @@ export function Sidebar() {
 
   const hasHrAccess = isAdmin || isHrManager;
 
-  const mainLinks = hasHrAccess ? [
-    { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  ] : [];
+  const mainLinks = hasHrAccess ? [{ href: "/", label: "Dashboard", icon: LayoutDashboard }] : [];
 
   const hrDatabaseLinks = hasHrAccess ? [
     { href: "/employees", label: "Employee Records", icon: Users },
@@ -166,9 +130,7 @@ export function Sidebar() {
     ...(hasHrAccess || isPayrollTeam ? [{ href: "/statutory-compliance", label: "Statutory Compliance", icon: Scale }] : []),
   ];
 
-  const assetLinks = (isAssetTeam && !isAdmin && !isHrManager) ? [
-    { href: "/assets", label: "Asset Administration", icon: Laptop },
-  ] : [];
+  const assetLinks = (isAssetTeam && !isAdmin && !isHrManager) ? [{ href: "/assets", label: "Asset Administration", icon: Laptop }] : [];
 
   const adminLinks = [
     ...(hasHrAccess ? [{ href: "/assets", label: "Assets", icon: Laptop }] : []),
@@ -176,10 +138,6 @@ export function Sidebar() {
     ...(hasHrAccess ? [{ href: "/exit", label: "Exit Management", icon: UserX }] : []),
     ...(hasHrAccess ? [{ href: "/announcements", label: "Announcements", icon: Bell }] : []),
     ...(hasHrAccess ? [{ href: "/company-policies", label: "Company Policies", icon: BookOpen }] : []),
-    // ...(hasHrAccess || isPmsTeam ? [{ href: "/performance", label: "Performance (PMS)", icon: Target }] : []),
-    // ...(hasHrAccess || isLmsTeam ? [{ href: "/learning", label: "Learning (LMS)", icon: GraduationCap }] : []),
-    // ...(hasHrAccess ? [{ href: "/engagement", label: "Engagement", icon: Heart }] : []),
-    // ...(hasHrAccess ? [{ href: "/travel", label: "Travel Management", icon: Plane }] : []),
     ...(isAdmin ? [{ href: "/entity-management", label: "Entity Management", icon: Layers }] : []),
   ];
 
@@ -193,8 +151,6 @@ export function Sidebar() {
     { href: "/team/payroll", label: "Payroll Team", icon: DollarSign, role: "payroll_team" },
     { href: "/team/projects", label: "Project Team", icon: Briefcase, role: "project_team" },
     { href: "/team/onboarding", label: "Onboarding Team", icon: UserPlus, role: "onboarding_team" },
-    // { href: "/team/pms", label: "PMS Team", icon: Target, role: "pms_team" },
-    // { href: "/team/lms", label: "LMS Team", icon: CalendarRange, role: "lms_team" },
   ];
 
   const teamDashboardLinks = isAdmin 
@@ -203,7 +159,7 @@ export function Sidebar() {
 
   const renderLinks = (links: typeof mainLinks, title: string) => (
     <div className="mb-4">
-      <p className="px-3 text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{title}</p>
+      <p className="px-3 text-xs font-semibold uppercase tracking-wider mb-2 text-[hsl(var(--sidebar-section))]">{title}</p>
       {links.map((link) => {
         const Icon = link.icon;
         const isActive = location === link.href;
@@ -214,11 +170,11 @@ export function Sidebar() {
             data-testid={`link-${link.label.toLowerCase().replace(/\s+/g, '-')}`}
             className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
               isActive 
-                ? 'bg-primary/10 text-primary' 
-                : 'text-slate-600 hover:bg-slate-100 hover:text-slate-900'
+                ? 'bg-[hsl(var(--sidebar-active-bg))] text-[hsl(var(--sidebar-active-fg))]' 
+                : 'text-[hsl(var(--sidebar-fg-muted))] hover:bg-[hsl(var(--sidebar-hover-bg))] hover:text-[hsl(var(--sidebar-fg))]'
             }`}
           >
-            <Icon className={`w-4 h-4 ${isActive ? 'text-primary' : 'text-slate-400'}`} />
+            <Icon className={`w-4 h-4 ${isActive ? 'text-[hsl(var(--sidebar-active-fg))]' : 'text-[hsl(var(--sidebar-icon))]'}`} />
             {link.label}
           </Link>
         );
@@ -228,130 +184,126 @@ export function Sidebar() {
 
   const { isOpen, setIsOpen } = useSidebar();
 
-  useEffect(() => {
-    setIsOpen(false);
-  }, [location]);
+  useEffect(() => { setIsOpen(false); }, [location]);
 
   return (
     <>
-      {isOpen && (
-        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsOpen(false)} />
-      )}
-      <aside className={`w-64 bg-white border-r border-slate-200 h-screen flex flex-col fixed left-0 top-0 z-50 transition-transform duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:z-30`}>
-      <div className="p-4 border-b border-slate-100 flex items-center gap-3">
-        <button onClick={() => setIsOpen(false)} className="lg:hidden p-1 rounded-lg hover:bg-slate-100 mr-1" data-testid="button-close-sidebar">
-          <X className="w-5 h-5 text-slate-500" />
-        </button>
-        {(() => {
-          const selectedEntity = entities.find(e => e.id === selectedEntityId);
-          const showLogo = !selectedEntity || selectedEntity.logoUrl;
-          if (showLogo) {
-            const logoSrc = selectedEntity?.logoUrl || fctLogo;
-            return <img src={logoSrc} alt={selectedEntity?.name || "FCT Energy"} className="h-10 w-auto" />;
-          }
-          return null;
-        })()}
-        <div>
-          <span className="font-bold text-lg text-slate-800 tracking-tight block">People Management</span>
-          <span className="text-xs text-slate-400">HR Portal</span>
+      {isOpen && (<div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsOpen(false)} />)}
+      <aside className={`w-64 h-screen flex flex-col fixed left-0 top-0 z-50 transition-transform duration-300 ease-in-out border-r bg-[hsl(var(--sidebar-bg))] border-[hsl(var(--sidebar-border))] ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:z-30`}>
+        <div className="p-4 border-b border-[hsl(var(--sidebar-border))] flex items-center gap-3">
+          <button onClick={() => setIsOpen(false)} className="lg:hidden p-1 rounded-lg hover:bg-[hsl(var(--sidebar-hover-bg))] mr-1" data-testid="button-close-sidebar">
+            <X className="w-5 h-5 text-[hsl(var(--sidebar-fg-muted))]" />
+          </button>
+          {(() => {
+            const selectedEntity = entities.find(e => e.id === selectedEntityId);
+            if (selectedEntity?.logoUrl) {
+              return <img src={selectedEntity.logoUrl} alt={selectedEntity.name} className="h-10 w-auto" />;
+            }
+            return <span className="font-bold text-xl text-[hsl(var(--sidebar-active-fg))]">Kadenc</span>;
+          })()}
+          <div>
+            <span className="font-bold text-lg tracking-tight block text-[hsl(var(--sidebar-fg))]">People Management</span>
+            <span className="text-xs text-[hsl(var(--sidebar-fg-muted))]">HR Portal</span>
+          </div>
         </div>
-      </div>
 
-      {entities.length > 0 && (
-        <div className="px-3 py-2 border-b border-slate-100">
-          <div className="relative" ref={entityDropdownRef}>
-            <button
-              type="button"
-              onClick={() => canSwitchEntity && setEntityDropdownOpen(!entityDropdownOpen)}
-              disabled={!canSwitchEntity}
-              className={`w-full flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${canSwitchEntity ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'}`}
-              data-testid="select-entity-filter"
-            >
-              <span className="truncate">
-                {selectedEntityIds.length === 0 ? 'All Entities' :
-                 selectedEntityIds.length === 1 ? entities.find(e => e.id === selectedEntityIds[0])?.name || 'Entity' :
-                 `${selectedEntityIds.length} Entities`}
-              </span>
-              <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${entityDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-            {entityDropdownOpen && canSwitchEntity && (
-              <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto">
-                <label className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm font-medium text-slate-700 border-b border-slate-100">
-                  <input
-                    type="checkbox"
-                    checked={selectedEntityIds.length === 0}
-                    onChange={() => setSelectedEntityIds([])}
-                    className="rounded border-slate-300 text-primary focus:ring-primary/30"
-                  />
-                  All Entities
-                </label>
-                {entities.map(entity => (
-                  <label key={entity.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
+        {entities.length > 0 && (
+          <div className="px-3 py-2 border-b border-[hsl(var(--sidebar-border))]">
+            <div className="relative" ref={entityDropdownRef}>
+              <button
+                type="button"
+                onClick={() => canSwitchEntity && setEntityDropdownOpen(!entityDropdownOpen)}
+                disabled={!canSwitchEntity}
+                className={`w-full flex items-center justify-between bg-[hsl(var(--sidebar-hover-bg))] border border-[hsl(var(--sidebar-border))] rounded-lg px-3 py-2 text-sm font-medium text-[hsl(var(--sidebar-fg))] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${canSwitchEntity ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'}`}
+                data-testid="select-entity-filter"
+              >
+                <span className="truncate">
+                  {selectedEntityIds.length === 0 ? 'All Entities' :
+                   selectedEntityIds.length === 1 ? entities.find(e => e.id === selectedEntityIds[0])?.name || 'Entity' :
+                   `${selectedEntityIds.length} Entities`}
+                </span>
+                <ChevronDown className={`w-4 h-4 text-[hsl(var(--sidebar-fg-muted))] transition-transform ${entityDropdownOpen ? 'rotate-180' : ''}`} />
+              </button>
+              {entityDropdownOpen && canSwitchEntity && (
+                <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto">
+                  <label className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm font-medium text-slate-700 border-b border-slate-100">
                     <input
                       type="checkbox"
-                      checked={selectedEntityIds.includes(entity.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedEntityIds([...selectedEntityIds, entity.id]);
-                        } else {
-                          const next = selectedEntityIds.filter(id => id !== entity.id);
-                          setSelectedEntityIds(next);
-                        }
-                      }}
+                      checked={selectedEntityIds.length === 0}
+                      onChange={() => setSelectedEntityIds([])}
                       className="rounded border-slate-300 text-primary focus:ring-primary/30"
                     />
-                    {entity.name} ({entity.code})
+                    All Entities
                   </label>
-                ))}
-              </div>
-            )}
+                  {entities.map(entity => (
+                    <label key={entity.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
+                      <input
+                        type="checkbox"
+                        checked={selectedEntityIds.includes(entity.id)}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedEntityIds([...selectedEntityIds, entity.id]);
+                          } else {
+                            const next = selectedEntityIds.filter(id => id !== entity.id);
+                            setSelectedEntityIds(next);
+                          }
+                        }}
+                        className="rounded border-slate-300 text-primary focus:ring-primary/30"
+                      />
+                      {entity.name} ({entity.code})
+                    </label>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="flex-1 py-3 px-3 overflow-y-auto">
+          {mainLinks.length > 0 && renderLinks(mainLinks, "Main")}
+          {hrDatabaseLinks.length > 0 && renderLinks(hrDatabaseLinks, "Employee Self Service")}
+          {timeLinks.length > 0 && renderLinks(timeLinks, "Time & Attendance")}
+          {financeLinks.length > 0 && renderLinks(financeLinks, "Finance")}
+          {assetLinks.length > 0 && renderLinks(assetLinks, "Asset Management")}
+          {adminLinks.length > 0 && renderLinks(adminLinks, "Administration")}
+          {teamDashboardLinks.length > 0 && renderLinks(teamDashboardLinks, "Team Dashboards")}
+          {reportsLinks.length > 0 && renderLinks(reportsLinks, "Reports")}
+        </div>
+
+        <div className="p-3 border-t border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-footer-bg))]">
+          <div className="flex items-center gap-3 mb-2">
+            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary/70 overflow-hidden flex items-center justify-center text-white font-bold text-sm">
+              {user?.firstName?.[0] || 'U'}{user?.lastName?.[0] || ''}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold truncate text-[hsl(var(--sidebar-fg))]">
+                {user?.firstName} {user?.lastName}
+              </p>
+              <p className="text-xs truncate text-[hsl(var(--sidebar-fg-muted))]">{user?.email}</p>
+              {currentEmployee && (
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {userAccessRoles.map((role, idx) => (
+                    <span key={idx} className="inline-block px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary rounded-full capitalize">
+                      {role.replace(/_/g, ' ')}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => logout()}
+              data-testid="button-logout"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors font-medium"
+            >
+              <LogOut className="w-4 h-4" />
+              Sign Out
+            </button>
+            <ThemeSwitcher />
           </div>
         </div>
-      )}
-
-      <div className="flex-1 py-3 px-3 overflow-y-auto">
-        {mainLinks.length > 0 && renderLinks(mainLinks, "Main")}
-        {hrDatabaseLinks.length > 0 && renderLinks(hrDatabaseLinks, "Employee Self Service")}
-        {timeLinks.length > 0 && renderLinks(timeLinks, "Time & Attendance")}
-        {financeLinks.length > 0 && renderLinks(financeLinks, "Finance")}
-        {assetLinks.length > 0 && renderLinks(assetLinks, "Asset Management")}
-        {adminLinks.length > 0 && renderLinks(adminLinks, "Administration")}
-        {teamDashboardLinks.length > 0 && renderLinks(teamDashboardLinks, "Team Dashboards")}
-        {reportsLinks.length > 0 && renderLinks(reportsLinks, "Reports")}
-      </div>
-
-      <div className="p-3 border-t border-slate-100 bg-slate-50/50">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary/70 overflow-hidden flex items-center justify-center text-white font-bold text-sm">
-            {user?.firstName?.[0] || 'U'}{user?.lastName?.[0] || ''}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-slate-900 truncate">
-              {user?.firstName} {user?.lastName}
-            </p>
-            <p className="text-xs text-slate-500 truncate">{user?.email}</p>
-            {currentEmployee && (
-              <div className="flex flex-wrap gap-1 mt-1">
-                {userAccessRoles.map((role, idx) => (
-                  <span key={idx} className="inline-block px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary rounded-full capitalize">
-                    {role.replace(/_/g, ' ')}
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-        <button 
-          onClick={() => logout()}
-          data-testid="button-logout"
-          className="w-full flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors font-medium"
-        >
-          <LogOut className="w-4 h-4" />
-          Sign Out
-        </button>
-		<ThemeSwitcher />
-      </div>
-    </aside>
+      </aside>
     </>
   );
 }
