@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, createContext, useContext } from "react";
 import { Link, useLocation } from "wouter";
+import { ThemeSwitcher } from "@/components/ThemeSwitcher";
 import { 
   LayoutDashboard, 
   Users, 
@@ -348,6 +349,7 @@ export function Sidebar() {
           <LogOut className="w-4 h-4" />
           Sign Out
         </button>
+		<ThemeSwitcher />
       </div>
     </aside>
     </>

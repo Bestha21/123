@@ -1,6 +1,7 @@
 import { Switch, Route } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { ThemeProvider } from "@/lib/themeContext";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Sidebar, SidebarProvider, MobileHeader } from "@/components/Sidebar";
@@ -364,7 +365,7 @@ function Router() {
   );
 }
 
-function App() {
+/*function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <EntityProvider>
@@ -375,6 +376,22 @@ function App() {
           </TooltipProvider>
         </SidebarProvider>
       </EntityProvider>
+    </QueryClientProvider>
+  );
+}*/
+function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <EntityProvider>
+          <SidebarProvider>
+            <TooltipProvider>
+              <Toaster />
+              <Router />
+            </TooltipProvider>
+          </SidebarProvider>
+        </EntityProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

@@ -32,8 +32,15 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback } from "react";
 import { ESSPayslipView } from "@/components/ESSPayslipView";
+import { useEssLayout, getEssLayoutOptions } from "@/lib/themeContext";
+import EmployeeSelfServiceBento from "./EmployeeSelfServiceBento";
+import { LayoutGrid, List } from "lucide-react";
 
 export default function EmployeeSelfService() {
+  const [essLayout, setEssLayout] = useEssLayout();
+  const layoutOptions = getEssLayoutOptions();
+  if (essLayout === "bento") return <EmployeeSelfServiceBento />;
+
   const { user } = useAuth();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("dashboard");
@@ -926,11 +933,29 @@ export default function EmployeeSelfService() {
   return (
     <div className="space-y-4 sm:space-y-6 max-w-full overflow-hidden pb-16 sm:pb-0">
       <div className="flex items-start justify-between flex-wrap gap-3 sm:gap-4">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Employee Self Service</h1>
-          <p className="text-xs sm:text-sm text-muted-foreground">Manage your HR activities and complete onboarding</p>
-          <p className="text-muted-foreground mt-1 text-sm">Welcome, {user?.firstName || 'Employee'}</p>
-        </div>
+  <div>
+    <h1 className="text-xl sm:text-2xl font-bold text-foreground">Employee Self Service</h1>
+    <p className="text-xs sm:text-sm text-muted-foreground">Manage your HR activities and complete onboarding</p>
+    <p className="text-muted-foreground mt-1 text-sm">Welcome, {user?.firstName || 'Employee'}</p>
+    {layoutOptions.length > 1 && (
+      <div className="mt-2 inline-flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+        <button
+          onClick={() => setEssLayout("classic")}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${essLayout === "classic" ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
+          data-testid="button-layout-classic"
+        >
+          <List className="w-3.5 h-3.5" /> Classic
+        </button>
+        <button
+          onClick={() => setEssLayout("bento")}
+          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${essLayout === "bento" ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
+          data-testid="button-layout-bento"
+        >
+          <LayoutGrid className="w-3.5 h-3.5" /> Bento
+        </button>
+      </div>
+    )}
+  </div>
         {currentEmployee && !currentEmployee.attendanceExempt && (
           <div className="hidden sm:flex gap-3 items-center">
             {(!todayLog || todayLog.checkOut) && (
