@@ -216,10 +216,17 @@ const AVAILABLE_THEMES: ThemeDefinition[] = THEMES.filter(t =>
   ENABLED_THEME_IDS.includes(t.id)
 );
 
+function safeGet(key: string): string | null {
+  try { return typeof window !== "undefined" ? window.localStorage.getItem(key) : null; }
+  catch { return null; }
+}
+function safeSet(key: string, value: string) {
+  try { if (typeof window !== "undefined") window.localStorage.setItem(key, value); } catch {}
+}
+
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeId>(() => {
-    if (typeof window === "undefined") return DEFAULT_THEME;
-    const stored = localStorage.getItem(STORAGE_KEY) as ThemeId | null;
+    const stored = safeGet(STORAGE_KEY) as ThemeId | null;
     const isAllowed = stored && AVAILABLE_THEMES.some(t => t.id === stored);
     if (isAllowed) return stored!;
     return AVAILABLE_THEMES.some(t => t.id === DEFAULT_THEME)
@@ -234,7 +241,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = (id: ThemeId) => {
     setThemeState(id);
-    localStorage.setItem(STORAGE_KEY, id);
+    safeSet(STORAGE_KEY, id);
   };
 
   const currentTheme = THEMES.find(t => t.id === theme) ?? THEMES[0];
@@ -256,8 +263,7 @@ export function useTheme() {
 const ESS_LAYOUT_KEY = "hrms-ess-layout";
 
 export function getEssLayout(): EssLayoutId {
-  if (typeof window === "undefined") return DEFAULT_ESS_LAYOUT;
-  const stored = localStorage.getItem(ESS_LAYOUT_KEY) as EssLayoutId | null;
+  const stored = safeGet(ESS_LAYOUT_KEY) as EssLayoutId | null;
   if (stored && ENABLED_ESS_LAYOUTS.includes(stored)) return stored;
   return ENABLED_ESS_LAYOUTS.includes(DEFAULT_ESS_LAYOUT)
     ? DEFAULT_ESS_LAYOUT
@@ -266,8 +272,8 @@ export function getEssLayout(): EssLayoutId {
 
 export function setEssLayoutStored(id: EssLayoutId) {
   if (!ENABLED_ESS_LAYOUTS.includes(id)) return;
-  localStorage.setItem(ESS_LAYOUT_KEY, id);
-  window.dispatchEvent(new Event("hrms-ess-layout-change"));
+  safeSet(ESS_LAYOUT_KEY, id);
+  try { if (typeof window !== "undefined") window.dispatchEvent(new Event("hrms-ess-layout-change")); } catch {}
 }
 
 export function useEssLayout(): [EssLayoutId, (id: EssLayoutId) => void] {

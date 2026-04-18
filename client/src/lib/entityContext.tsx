@@ -24,14 +24,22 @@ const EntityContext = createContext<EntityContextType>({
   entityFilterParam: "",
 });
 
+function safeLS() {
+  try { return typeof window !== "undefined" ? window.localStorage : null; } catch { return null; }
+}
+
 export function EntityProvider({ children }: { children: ReactNode }) {
   const [selectedEntityIds, setSelectedEntityIdsState] = useState<number[]>(() => {
-    const stored = localStorage.getItem("selectedEntityIds");
-    if (stored) {
-      try { return JSON.parse(stored); } catch { return []; }
-    }
-    const oldSingle = localStorage.getItem("selectedEntityId");
-    if (oldSingle) return [Number(oldSingle)];
+    try {
+      const ls = safeLS();
+      if (!ls) return [];
+      const stored = ls.getItem("selectedEntityIds");
+      if (stored) {
+        try { return JSON.parse(stored); } catch { return []; }
+      }
+      const oldSingle = ls.getItem("selectedEntityId");
+      if (oldSingle) return [Number(oldSingle)];
+    } catch {}
     return [];
   });
 
