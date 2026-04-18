@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 
-export type ThemeId = "fct-green" | "successfactors" | "workday" | "teams";
+export type ThemeId = "coolgre" | "rora" | "tejvin" | "leso";
 
 export interface ThemeDefinition {
   id: ThemeId;
@@ -17,10 +17,10 @@ export interface ThemeDefinition {
 // Themes employees are allowed to pick. Remove IDs to hide them.
 // Valid IDs: "fct-green" | "successfactors" | "workday" | "teams"
 export const ENABLED_THEME_IDS: ThemeId[] = [
-  "fct-green",
-  "successfactors",
-  "workday",
-  "teams",
+  "coolgre",
+  "rora",
+  "tejvin",
+  "leso",
 ];
 
 // ESS layouts employees are allowed to pick.
@@ -35,8 +35,8 @@ export const DEFAULT_ESS_LAYOUT: EssLayoutId = "classic";
 
 export const THEMES: ThemeDefinition[] = [
   {
-    id: "fct-green",
-    name: "FCT Green (Default)",
+    id: "coolgre",
+    name: "Cool Green (Default)",
     description: "Light sidebar, green accents",
     swatch: "#1FA75A",
     sidebarSwatch: "#FFFFFF",
@@ -74,8 +74,8 @@ export const THEMES: ThemeDefinition[] = [
     },
   },
   {
-    id: "successfactors",
-    name: "SAP SuccessFactors",
+    id: "rora",
+    name: "rora Success",
     description: "Clean light sidebar, enterprise blue",
     swatch: "#0070F2",
     sidebarSwatch: "#F8FAFC",
@@ -113,8 +113,8 @@ export const THEMES: ThemeDefinition[] = [
     },
   },
   {
-    id: "workday",
-    name: "Workday",
+    id: "tejvin",
+    name: "tejvins",
     description: "Dark navy sidebar, coral accent",
     swatch: "#F15A29",
     sidebarSwatch: "#1E2A3A",
@@ -152,8 +152,8 @@ export const THEMES: ThemeDefinition[] = [
     },
   },
   {
-    id: "teams",
-    name: "Microsoft Teams",
+    id: "leso",
+    name: "leso's",
     description: "Dark indigo sidebar, purple accent",
     swatch: "#5B5FC7",
     sidebarSwatch: "#2D2C40",
@@ -192,7 +192,7 @@ export const THEMES: ThemeDefinition[] = [
   },
 ];
 
-const DEFAULT_THEME: ThemeId = "fct-green";
+const DEFAULT_THEME: ThemeId = "coolgre";
 const STORAGE_KEY = "hrms-theme";
 
 interface ThemeContextValue {

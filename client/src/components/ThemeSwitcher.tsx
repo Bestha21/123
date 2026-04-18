@@ -32,22 +32,27 @@ export function ThemeSwitcher({ variant = "icon" }: ThemeSwitcherProps) {
           {variant === "button" && <span>Theme</span>}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-64">
-        <DropdownMenuLabel>Choose Theme</DropdownMenuLabel>
+            <DropdownMenuContent
+        align="end"
+        side="top"
+        sideOffset={8}
+        className="w-64 bg-white border border-slate-200 shadow-xl rounded-xl p-1 z-[60]"
+      >
+        <DropdownMenuLabel className="text-slate-900">Choose Theme</DropdownMenuLabel>
         <DropdownMenuSeparator />
         {themes.map((t) => (
           <DropdownMenuItem
             key={t.id}
             onClick={() => setTheme(t.id)}
             data-testid={`theme-option-${t.id}`}
-            className="flex items-center gap-3 cursor-pointer py-2"
+            className="flex items-center gap-3 cursor-pointer py-2 rounded-lg focus:bg-slate-100"
           >
             <span
               className="w-5 h-5 rounded-full border border-slate-200 flex-shrink-0"
               style={{ backgroundColor: t.swatch }}
             />
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-medium">{t.name}</div>
+              <div className="text-sm font-medium text-slate-900">{t.name}</div>
               <div className="text-xs text-slate-500 truncate">{t.description}</div>
             </div>
             {theme === t.id && <Check className="w-4 h-4 text-primary flex-shrink-0" />}
