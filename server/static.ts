@@ -3,13 +3,22 @@ import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+function getDirname(): string {
+  try {
+    if (typeof (import.meta as any).url === "string" && (import.meta as any).url) {
+      return path.dirname(fileURLToPath((import.meta as any).url));
+    }
+  } catch {}
+  if (typeof __dirname !== "undefined") return __dirname;
+  return process.cwd();
+}
+
+const HERE = getDirname();
 
 function resolvePublicDir(): string {
   const candidates = [
-    path.resolve(__dirname, "public"),
-    path.resolve(__dirname, "..", "dist", "public"),
+    path.resolve(HERE, "public"),
+    path.resolve(HERE, "..", "dist", "public"),
     path.resolve(process.cwd(), "dist", "public"),
   ];
   for (const c of candidates) {
