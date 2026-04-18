@@ -4641,7 +4641,7 @@ function EmployeeSelfServiceClassic() {
       </Dialog>
     </div>
   );
-},
+}
 export default function EmployeeSelfService() {
   const [essLayout] = useEssLayout();
   if (essLayout === "bento") return <EmployeeSelfServiceBento />;
