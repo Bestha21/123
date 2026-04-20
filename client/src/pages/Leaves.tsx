@@ -301,7 +301,11 @@ export default function Leaves() {
     return leaveEmp?.reportingManagerId === currentEmployee?.employeeCode;
   }) || [];
 
-  const employeeGender = currentEmployee?.gender?.toLowerCase() || '';
+    const rawGender = (currentEmployee?.gender || '').toString().trim().toLowerCase();
+  const employeeGender =
+    rawGender.startsWith('f') ? 'female' :
+    rawGender.startsWith('m') ? 'male' :
+    '';
   const isProbation = (currentEmployee?.employmentStatus || '').toLowerCase() === 'probation';
   const joinDate = currentEmployee?.joinDate ? new Date(currentEmployee.joinDate) : null;
   const daysSinceJoining = joinDate ? Math.floor((new Date().getTime() - joinDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
