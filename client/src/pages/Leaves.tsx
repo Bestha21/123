@@ -231,7 +231,7 @@ export default function Leaves() {
           if (existingYear !== currentYear) latestByType[bal.leaveTypeId] = bal;
         }
       }
-      for (const bal of Object.values(latestByType)) {
+            for (const bal of Object.values(latestByType)) {
         const lt = leaveTypesDb.find(t => t.id === bal.leaveTypeId);
         if (lt) {
           const used = parseFloat(bal.used || "0");
@@ -239,9 +239,11 @@ export default function Leaves() {
           const accrued = parseFloat((bal as any).accrued || "0");
           const opening = parseFloat((bal as any).opening || "0");
           const total = (opening + accrued) > 0 ? (opening + accrued) : (lt.annualAllowance || 0);
+          // Cap remaining at total to avoid confusing "X remaining out of Y" when X > Y.
+          const remaining = Math.min(Math.max(dbBalance, 0), total);
           map[lt.code] = {
             used,
-            balance: Math.max(dbBalance, 0),
+            balance: remaining,
             total,
           };
         }

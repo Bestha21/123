@@ -1462,12 +1462,24 @@ function AttendanceLogTab({ currentEmployee, employees, isAdmin, shiftsData, all
       const weekOfMonth = Math.ceil(day.getDate() / 7);
       const wo = dayOfWeek === 0 || (dayOfWeek === 6 && (weekOfMonth === 2 || weekOfMonth === 4));
       const holiday = allHolidays?.find(h => h.date === dateStr);
-      const log = logAttendance?.find(l => l.employeeId === viewingEmpId && l.date === dateStr);
-      const leave = leaveRequests?.find(lr =>
+            const log = logAttendance?.find(l => l.employeeId === viewingEmpId && l.date === dateStr);
+      const dayLeaves = (leaveRequests || []).filter(lr =>
         lr.employeeId === viewingEmpId &&
-        (lr.status === 'approved') &&
+        lr.status === 'approved' &&
         lr.startDate <= dateStr && lr.endDate >= dateStr
       );
+      // Treat day as fully on-leave if either: a single full-day leave exists,
+      // OR two half-day leaves cover both halves of the same date.
+      const hasFullDay = dayLeaves.some(l => !l.halfDayPeriod && parseFloat(l.days || '1') >= 1);
+      const halves = new Set(
+        dayLeaves
+          .filter(l => l.halfDayPeriod)
+          .map(l => (l.halfDayPeriod || '').toLowerCase())
+      );
+      const fullyCoveredByHalves = halves.has('first_half') && halves.has('second_half');
+      const leave = (hasFullDay || fullyCoveredByHalves || dayLeaves.length > 0)
+        ? (dayLeaves[0] || null)
+        : null;
       const isToday = isSameDay(day, new Date());
       const isFuture = day > new Date();
 
