@@ -1996,7 +1996,7 @@ export async function registerRoutes(
         }
       }
 
-            const leaveTypeMap: Record<string, string> = {
+                  const leaveTypeMap: Record<string, string> = {
         earned: "EL", casual: "CL", sick: "SL",
         bereavement: "BL", paternity: "PL", comp_off: "CO", lop: "LOP"
       };
