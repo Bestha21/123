@@ -352,10 +352,49 @@ export default function Leaves() {
     return p.gender === 'male';
   });
 
+    const LEAVE_TYPE_TO_CODE: Record<string, string> = {
+    earned: "EL", casual: "CL", sick: "SL",
+    bereavement: "BL", paternity: "PL", maternity: "ML",
+    comp_off: "CO", lop: "LOP",
+  };
+
+  const computeRequestedDays = (): number => {
+    if (!startDate || !endDate) return 0;
+    if (isHalfDay) return 0.5;
+    const s = new Date(startDate);
+    const e = new Date(endDate);
+    const holidayDates = new Set((holidays || []).map((h: any) => h.date));
+    let count = 0;
+    const cursor = new Date(s);
+    while (cursor <= e) {
+      const dow = cursor.getDay();
+      const ds = cursor.toISOString().split('T')[0];
+      if (dow !== 0 && dow !== 6 && !holidayDates.has(ds)) count++;
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    return count > 0 ? count : 1;
+  };
+
+  const selectedLeaveBalance = (() => {
+    const code = LEAVE_TYPE_TO_CODE[leaveType];
+    if (!code) return null;
+    return selfBalanceMap[code] || null;
+  })();
+
+  const requestedDays = computeRequestedDays();
+  const insufficientBalance = !!(
+    selectedLeaveBalance &&
+    leaveType && !['lop', 'comp_off'].includes(leaveType) &&
+    requestedDays > 0 && requestedDays > selectedLeaveBalance.balance
+  );
+
   const applyLeaveMutation = useMutation({
     mutationFn: async () => {
       if (!currentEmployee) throw new Error("Employee not found");
       if (!leaveType || !startDate || !endDate) throw new Error("Please fill all required fields");
+      if (insufficientBalance) {
+        throw new Error("Sufficient leave balance not available to submit the request");
+      }
 
       const res = await apiRequest("POST", "/api/leaves", {
         employeeId: currentEmployee.id,
@@ -656,7 +695,7 @@ export default function Leaves() {
                   <SelectTrigger data-testid="select-leave-type">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
-                  <SelectContent>
+                                    <SelectContent>
                     {leaveTypeOptions.map(type => (
                       <SelectItem key={type.value} value={type.value}>
                         {type.label}
@@ -664,6 +703,25 @@ export default function Leaves() {
                     ))}
                   </SelectContent>
                 </Select>
+                {selectedLeaveBalance && !['lop', 'comp_off'].includes(leaveType) && (
+                  <div
+                    className="text-xs text-muted-foreground"
+                    data-testid="text-selected-leave-balance"
+                  >
+                    Available balance: <span className="font-medium text-foreground">{selectedLeaveBalance.balance}</span> day(s)
+                    {requestedDays > 0 && (
+                      <> · Requested: <span className="font-medium text-foreground">{requestedDays}</span> day(s)</>
+                    )}
+                  </div>
+                )}
+                {insufficientBalance && (
+                  <div
+                    className="p-2 bg-red-50 border border-red-200 rounded text-xs text-red-700"
+                    data-testid="text-insufficient-balance"
+                  >
+                    Sufficient leave balance not available to submit the request.
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-3">
                 <input
