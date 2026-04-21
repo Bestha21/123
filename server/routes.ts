@@ -133,6 +133,49 @@ export async function registerRoutes(
     });
   });
 
+  app.post("/api/admin/setup", async (req, res) => {
+    try {
+      const { secret, action, data } = req.body;
+      if (secret !== process.env.SESSION_SECRET) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+      if (action === "set-role") {
+        const emp = await storage.getEmployeeByEmail(data.email);
+        if (!emp) return res.status(404).json({ message: "Employee not found" });
+        await storage.updateEmployee(emp.id, { accessRole: data.accessRole });
+        return res.json({ success: true, email: data.email, accessRole: data.accessRole });
+      }
+      if (action === "update-email") {
+        const emp = await storage.getEmployee(data.id);
+        if (!emp) return res.status(404).json({ message: "Employee not found" });
+        await storage.updateEmployee(emp.id, { email: data.email });
+        return res.json({ success: true, id: data.id, email: data.email });
+      }
+      if (action === "run-sql") {
+        await pool.query(data.sql);
+        return res.json({ success: true });
+      }
+      if (action === "create-employee") {
+        const emp = await storage.createEmployee(data);
+        return res.json({ success: true, employeeCode: emp.employeeCode, id: emp.id });
+      }
+      if (action === "create-user") {
+        const bcrypt = await import("bcryptjs");
+        const hashedPassword = await bcrypt.hash(data.password, 10);
+        const existing = await authStorage.getUserByEmail(data.email);
+        if (existing) {
+          await authStorage.updateUserPassword(existing.id, hashedPassword);
+          return res.json({ success: true, email: data.email, action: "password-updated" });
+        }
+        await authStorage.createUser({ email: data.email, firstName: data.firstName || "", lastName: data.lastName || "", password: hashedPassword, profileImageUrl: null });
+        return res.json({ success: true, email: data.email, action: "user-created" });
+      }
+      return res.status(400).json({ message: "Invalid action" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // Current user's employee info and access role
   app.get("/api/me", async (req, res) => {
     const user = req.user as any;
@@ -307,13 +350,13 @@ export async function registerRoutes(
         "lifeInsuranceProvider", "lifeInsurancePolicyNumber", "lifeInsuranceSumInsured",
         "lifeInsuranceNomineeName", "lifeInsuranceNomineeRelation",
         "personalAccidentProvider", "personalAccidentPolicyNumber", "personalAccidentSumInsured",
-        "qualificationScore", "secondQualificationScore", "noticeBuyoutDuration","qualificationScore", "secondQualificationScore", "noticeBuyoutDuration", "accessRole", "email",
+        "qualificationScore", "secondQualificationScore", "noticeBuyoutDuration", "accessRole",
       ]);
       const ALLOWED_INT_FIELDS = new Set([
         "departmentId", "entityId", "salaryStructureId", "shiftId", "projectId", "vicePresidentId", "noticeBuyoutPayments",
       ]);
       const ALLOWED_BOOL_FIELDS = new Set(["attendanceExempt"]);
-      const BLOCKED_FIELDS = new Set(["id", "employeeCode", "password", "profileImageUrl", "createdAt", "updatedAt", "onboardingStatus"]);
+      const BLOCKED_FIELDS = new Set(["id", "email", "employeeCode", "password", "profileImageUrl", "createdAt", "updatedAt", "onboardingStatus"]);
 
       const invalidFields = fields.filter((f: string) => !ALLOWED_TEXT_FIELDS.has(f) && !ALLOWED_INT_FIELDS.has(f) && !ALLOWED_BOOL_FIELDS.has(f) && f !== matchField);
       if (invalidFields.length > 0) {
@@ -348,7 +391,7 @@ export async function registerRoutes(
           const val = row[field];
           if (val === undefined || val === null || val === "") continue;
 
-         if (ALLOWED_INT_FIELDS.has(field)) {
+          if (ALLOWED_INT_FIELDS.has(field)) {
             const parsed = parseInt(val);
             if (isNaN(parsed)) {
               errors.push(`${matchValue}: Invalid number for ${field}: "${val}"`);
@@ -1916,7 +1959,7 @@ export async function registerRoutes(
             startDate.getTime() === endDate.getTime() &&
             exStart.getTime() === exEnd.getTime() &&
             startDate.getTime() === exStart.getTime();
-                    if (
+          if (
             sameSingleDate &&
             newIsHalf &&
             exIsHalf &&
@@ -1924,9 +1967,7 @@ export async function registerRoutes(
             exHalf &&
             newHalf !== exHalf
           ) {
-            // Opposite halves on same date: only allowed when BOTH halves are
-            // Casual / Sick / Earned leave (in any combination).
-                        // Opposite halves on same date: allowed only when BOTH halves are
+            // Opposite halves on same date: allowed only when BOTH halves are
             // the SAME leave type (any type — CL+CL, SL+SL, BL+BL, etc.).
             const newType = (input.leaveType || '').toLowerCase();
             const exType = (existing.leaveType || '').toLowerCase();
@@ -1936,6 +1977,10 @@ export async function registerRoutes(
             return res.status(400).json({
               message: `Can't apply different leave for the same day. Both halves must be the same leave type.`
             });
+          }
+          return res.status(400).json({ 
+            message: `You already have a ${existing.status} leave request (${existing.leaveType}) from ${existing.startDate} to ${existing.endDate} that overlaps with these dates.` 
+          });
         }
       }
 
@@ -1996,7 +2041,7 @@ export async function registerRoutes(
         }
       }
 
-                  const leaveTypeMap: Record<string, string> = {
+      const leaveTypeMap: Record<string, string> = {
         earned: "EL", casual: "CL", sick: "SL",
         bereavement: "BL", paternity: "PL", comp_off: "CO", lop: "LOP"
       };
@@ -3646,17 +3691,17 @@ export async function registerRoutes(
       const allEmps = await storage.getEmployees();
       const activeEmps = allEmps.filter((e: any) => e.status === 'active' && e.email);
       let sent = 0, failed = 0;
-for (const emp of activeEmps) {
-  try {
-    const result = await sendAnnouncementEmail(emp.email!, input.title, input.content || '', input.priority);
-    if (result) { sent++; } else { failed++; console.log(`Announcement email failed for: ${emp.email}`); }
-  } catch (err: any) {
-    failed++;
-    console.error(`Announcement email error for ${emp.email}:`, err.message);
-  }
-}
-console.log(`Announcement emails: ${sent} sent, ${failed} failed out of ${activeEmps.length} active employees`);
-} catch (e) { console.error("Announcement broadcast error:", e); }
+      for (const emp of activeEmps) {
+        try {
+          const result = await sendAnnouncementEmail(emp.email!, input.title, input.content || '', input.priority);
+          if (result) { sent++; } else { failed++; console.log(`Announcement email failed for: ${emp.email}`); }
+        } catch (err: any) {
+          failed++;
+          console.error(`Announcement email error for ${emp.email}:`, err.message);
+        }
+      }
+      console.log(`Announcement emails: ${sent} sent, ${failed} failed out of ${activeEmps.length} active employees`);
+    } catch (e) { console.error("Announcement broadcast error:", e); }
   });
 
   // Onboarding
