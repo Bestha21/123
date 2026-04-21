@@ -1419,8 +1419,8 @@ function AttendanceLogTab({ currentEmployee, employees, isAdmin, shiftsData, all
     },
   });
 
-  const { data: leaveRequests } = useQuery<any[]>({
-    queryKey: ["/api/leave-requests"],
+    const { data: leaveRequests } = useQuery<any[]>({
+    queryKey: ["/api/leaves"],
   });
 
   const employeeShift = useMemo(() => {
