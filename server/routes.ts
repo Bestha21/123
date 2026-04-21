@@ -1899,12 +1899,33 @@ export async function registerRoutes(
       let days = computedDays > 0 ? computedDays : (input.days ? parseFloat(input.days) : Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
 
       // --- Duplicate leave date validation ---
+      // Allow same-date overlap when both leaves are half-day on opposite halves
+      // (e.g. CL first_half + SL second_half on the same date is allowed).
       const existingLeaves = await storage.getLeaveRequests(input.employeeId);
       const activeLeaves = existingLeaves.filter(l => l.status === 'pending' || l.status === 'approved');
+      const newIsHalf = !!input.halfDayPeriod || (input.days !== undefined && parseFloat(input.days as any) === 0.5);
+      const newHalf = (input.halfDayPeriod || '').toLowerCase();
       for (const existing of activeLeaves) {
         const exStart = new Date(existing.startDate);
         const exEnd = new Date(existing.endDate);
         if (startDate <= exEnd && endDate >= exStart) {
+          const exIsHalf = !!existing.halfDayPeriod || parseFloat(existing.days || '0') === 0.5;
+          const exHalf = (existing.halfDayPeriod || '').toLowerCase();
+          // Same single date AND both half-day AND opposite halves => allow
+          const sameSingleDate =
+            startDate.getTime() === endDate.getTime() &&
+            exStart.getTime() === exEnd.getTime() &&
+            startDate.getTime() === exStart.getTime();
+          if (
+            sameSingleDate &&
+            newIsHalf &&
+            exIsHalf &&
+            newHalf &&
+            exHalf &&
+            newHalf !== exHalf
+          ) {
+            continue; // opposite halves on same date — allowed
+          }
           return res.status(400).json({ 
             message: `You already have a ${existing.status} leave request (${existing.leaveType}) from ${existing.startDate} to ${existing.endDate} that overlaps with these dates.` 
           });
