@@ -219,14 +219,29 @@ export default function Leaves() {
   const buildBalanceMap = (balances: LeaveBalance[] | undefined, empLeaves: LeaveRequest[]) => {
     const map: Record<string, { used: number; balance: number; total: number }> = {};
     if (balances && balances.length > 0 && leaveTypesDb) {
+      const currentYear = new Date().getFullYear();
+      const latestByType: Record<number, LeaveBalance> = {};
       for (const bal of balances) {
+        const existing = latestByType[bal.leaveTypeId];
+        const balYear = (bal as any).year ?? 0;
+        const existingYear = existing ? ((existing as any).year ?? 0) : -1;
+        if (balYear === currentYear) {
+          latestByType[bal.leaveTypeId] = bal;
+        } else if (!existing || balYear > existingYear) {
+          if (existingYear !== currentYear) latestByType[bal.leaveTypeId] = bal;
+        }
+      }
+      for (const bal of Object.values(latestByType)) {
         const lt = leaveTypesDb.find(t => t.id === bal.leaveTypeId);
         if (lt) {
           const used = parseFloat(bal.used || "0");
-          const total = lt.annualAllowance || 0;
+          const dbBalance = parseFloat((bal as any).balance || "0");
+          const accrued = parseFloat((bal as any).accrued || "0");
+          const opening = parseFloat((bal as any).opening || "0");
+          const total = (opening + accrued) > 0 ? (opening + accrued) : (lt.annualAllowance || 0);
           map[lt.code] = {
             used,
-            balance: Math.max(total - used, 0),
+            balance: Math.max(dbBalance, 0),
             total,
           };
         }
@@ -301,7 +316,7 @@ export default function Leaves() {
     return leaveEmp?.reportingManagerId === currentEmployee?.employeeCode;
   }) || [];
 
-    const rawGender = (currentEmployee?.gender || '').toString().trim().toLowerCase();
+  const rawGender = (currentEmployee?.gender || '').toString().trim().toLowerCase();
   const employeeGender =
     rawGender.startsWith('f') ? 'female' :
     rawGender.startsWith('m') ? 'male' :
