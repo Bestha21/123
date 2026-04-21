@@ -1916,7 +1916,7 @@ export async function registerRoutes(
             startDate.getTime() === endDate.getTime() &&
             exStart.getTime() === exEnd.getTime() &&
             startDate.getTime() === exStart.getTime();
-          if (
+                    if (
             sameSingleDate &&
             newIsHalf &&
             exIsHalf &&
@@ -1924,11 +1924,18 @@ export async function registerRoutes(
             exHalf &&
             newHalf !== exHalf
           ) {
-            continue; // opposite halves on same date — allowed
-          }
-          return res.status(400).json({ 
-            message: `You already have a ${existing.status} leave request (${existing.leaveType}) from ${existing.startDate} to ${existing.endDate} that overlaps with these dates.` 
-          });
+            // Opposite halves on same date: only allowed when BOTH halves are
+            // Casual / Sick / Earned leave (in any combination).
+                        // Opposite halves on same date: allowed only when BOTH halves are
+            // the SAME leave type (any type — CL+CL, SL+SL, BL+BL, etc.).
+            const newType = (input.leaveType || '').toLowerCase();
+            const exType = (existing.leaveType || '').toLowerCase();
+            if (newType === exType) {
+              continue; // allowed
+            }
+            return res.status(400).json({
+              message: `Can't apply different leave for the same day. Both halves must be the same leave type.`
+            });
         }
       }
 
@@ -1989,13 +1996,36 @@ export async function registerRoutes(
         }
       }
 
-      const leaveTypeMap: Record<string, string> = {
+            const leaveTypeMap: Record<string, string> = {
         earned: "EL", casual: "CL", sick: "SL",
         bereavement: "BL", paternity: "PL", comp_off: "CO", lop: "LOP"
       };
       const code = leaveTypeMap[input.leaveType] || input.leaveType.toUpperCase();
       const allTypes = await storage.getLeaveTypes();
       const matchedType = allTypes.find(t => t.code === code);
+
+      // --- Balance check: ensure requested days don't exceed available balance ---
+      // Skip for LOP (loss of pay has no balance) and Comp Off (handled separately).
+      if (!['lop', 'comp_off'].includes(input.leaveType) && matchedType) {
+        const allBalances = await storage.getLeaveBalances(input.employeeId);
+        const currentYear = new Date().getFullYear();
+        const balRow = allBalances.find(
+          b => b.leaveTypeId === matchedType.id && b.year === currentYear
+        );
+        if (balRow) {
+          const opening = parseFloat((balRow as any).opening || '0');
+          const accrued = parseFloat((balRow as any).accrued || '0');
+          const used = parseFloat((balRow as any).used || '0');
+          const total = opening + accrued;
+          const remaining = Math.max(total - used, 0);
+          if (days > remaining) {
+            const typeLabel = matchedType.name || code;
+            return res.status(400).json({
+              message: `You don't have enough ${typeLabel} balance. Available: ${remaining} day(s), Requested: ${days} day(s).`
+            });
+          }
+        }
+      }
 
       const leave = await storage.createLeaveRequest({
         ...input,
