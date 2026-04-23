@@ -1883,7 +1883,7 @@ export async function registerRoutes(
     }
   });
 
-  // Leaves
+ // Leaves
   app.get(api.leave.list.path, async (req, res) => {
     const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const status = req.query.status as string | undefined;
@@ -1891,85 +1891,87 @@ export async function registerRoutes(
     res.json(leaves);
   });
 
- app.post(api.leave.create.path, upload.single("medicalCertificateFile"), async (req, res) => {
-  try {
-    const body = req.body as any;
+  app.post(api.leave.create.path, upload.single("medicalCertificateFile"), async (req, res) => {
+    try {
+      const body = req.body as any;
 
-    // 1. Prepare the data (Coerce strings from FormData back to proper types)
-    const sanitizedInput = {
-      ...body,
-      employeeId: body.employeeId ? Number(body.employeeId) : undefined,
-      // Days needs to be a string for your schema, but handled safely
-      days: body.days !== undefined ? String(body.days) : undefined,
-    };
+      // 1. Sanitize and Coerce types (Fixes "Expected number, received string")
+      const sanitizedInput = {
+        ...body,
+        employeeId: body.employeeId ? Number(body.employeeId) : undefined,
+        days: body.days !== undefined ? String(body.days) : undefined,
+      };
 
-    // 2. Parse/Validate using your Zod schema
-    const input = api.leave.create.input.parse(sanitizedInput);
+      // 2. Parse/Validate using Zod
+      const input = api.leave.create.input.parse(sanitizedInput);
 
+      // 3. Define Mappings (Fixes "Cannot access before initialization")
+      const leaveTypeMap: Record<string, string> = {
+        earned: "EL", casual: "CL", sick: "SL",
+        bereavement: "BL", paternity: "PL", maternity: "ML", comp_off: "CO", lop: "LOP"
+      };
+      
+      const code = leaveTypeMap[input.leaveType] || input.leaveType.toUpperCase();
+
+      // 4. FETCH ALL REQUIRED DATA FIRST
+      const [existingLeaves, allHolidays, allLeaveTypes, leaveEmployee] = await Promise.all([
+        storage.getLeaveRequests(input.employeeId),
+        storage.getHolidays(),
+        storage.getLeaveTypes(),
+        storage.getEmployee(input.employeeId)
+      ]);
+
+      if (!leaveEmployee) return res.status(404).json({ message: "Employee not found" });
+
+      const activeLeaves = existingLeaves.filter(l => l.status === 'pending' || l.status === 'approved');
+      const holidayDates = new Set(allHolidays.map(h => h.date));
+      const matchedType = allLeaveTypes.find(t => t.code === code);
       const startDate = new Date(input.startDate);
       const endDate = new Date(input.endDate);
 
-      const allHolidays = await storage.getHolidays();
-      const holidayDates = new Set(allHolidays.map(h => h.date));
+      // 5. CALCULATE DAYS (Exclude Weekends/Holidays)
       let computedDays = 0;
-      if (input.days && parseFloat(input.days) === 0.5) {
+      const newIsHalf = !!input.halfDayPeriod || parseFloat(input.days || '0') === 0.5;
+      
+      if (newIsHalf) {
         computedDays = 0.5;
       } else {
         const cursor = new Date(startDate);
         while (cursor <= endDate) {
           const dow = cursor.getDay();
-          const dateStr = cursor.toISOString().split('T')[0];
-          if (dow !== 0 && dow !== 6 && !holidayDates.has(dateStr)) {
-            computedDays++;
-          }
+          const dStr = cursor.toISOString().split('T')[0];
+          if (dow !== 0 && dow !== 6 && !holidayDates.has(dStr)) computedDays++;
           cursor.setDate(cursor.getDate() + 1);
         }
       }
-      let days = computedDays > 0 ? computedDays : (input.days ? parseFloat(input.days) : Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+      const finalDays = computedDays > 0 ? computedDays : 1;
 
-      // --- Duplicate leave date validation ---
-      // Allow same-date overlap when both leaves are half-day on opposite halves
-      // (e.g. CL first_half + SL second_half on the same date is allowed).
-      const existingLeaves = await storage.getLeaveRequests(input.employeeId);
-      const activeLeaves = existingLeaves.filter(l => l.status === 'pending' || l.status === 'approved');
-      const newIsHalf = !!input.halfDayPeriod || (input.days !== undefined && parseFloat(input.days as any) === 0.5);
-      const newHalf = (input.halfDayPeriod || '').toLowerCase();
-      for (const existing of activeLeaves) {
-        const exStart = new Date(existing.startDate);
-        const exEnd = new Date(existing.endDate);
-        if (startDate <= exEnd && endDate >= exStart) {
-          const exIsHalf = !!existing.halfDayPeriod || parseFloat(existing.days || '0') === 0.5;
-          const exHalf = (existing.halfDayPeriod || '').toLowerCase();
-          // Same single date AND both half-day AND opposite halves => allow
-          const sameSingleDate =
-            startDate.getTime() === endDate.getTime() &&
-            exStart.getTime() === exEnd.getTime() &&
-            startDate.getTime() === exStart.getTime();
-          if (
-            sameSingleDate &&
-            newIsHalf &&
-            exIsHalf &&
-            newHalf &&
-            exHalf &&
-            newHalf !== exHalf
-          ) {
-            // Opposite halves on same date: allowed only when BOTH halves are
-            // the SAME leave type (any type — CL+CL, SL+SL, BL+BL, etc.).
-            const newType = (input.leaveType || '').toLowerCase();
-            const exType = (existing.leaveType || '').toLowerCase();
-            if (newType === exType) {
-              continue; // allowed
-            }
-            return res.status(400).json({
-              message: `Can't apply different leave for the same day. Both halves must be the same leave type.`
-            });
-          }
-          return res.status(400).json({ 
-            message: `You already have a ${existing.status} leave request (${existing.leaveType}) from ${existing.startDate} to ${existing.endDate} that overlaps with these dates.` 
-          });
-        }
+      // 6. PROBATION & ELIGIBILITY VALIDATIONS
+      const isProbation = (leaveEmployee.employmentStatus || '').toLowerCase() === 'probation';
+      const joinDate = leaveEmployee.joinDate ? new Date(leaveEmployee.joinDate) : null;
+      const daysSinceJoiningAtStart = joinDate ? Math.floor((startDate.getTime() - joinDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
+
+      const paidLeaveTypes = ['earned', 'paternity', 'maternity', 'bereavement'];
+      if (isProbation && paidLeaveTypes.includes(input.leaveType)) {
+        return res.status(400).json({ message: `Employees on probation cannot avail ${input.leaveType} leave.` });
       }
 
+      if (input.leaveType === 'earned' && daysSinceJoiningAtStart < 180) {
+        const eligibilityDate = joinDate ? new Date(joinDate.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : 'N/A';
+        return res.status(400).json({ message: `Earned Leave (EL) is only available after 180 days of service. Eligible from: ${eligibilityDate}.` });
+      }
+
+      const exitRes = await pool.query(`SELECT id FROM exit_records WHERE employee_id = $1 AND clearance_status != 'completed'`, [input.employeeId]);
+      if (exitRes.rows.length > 0 && ['earned', 'casual', 'comp_off'].includes(input.leaveType)) {
+        return res.status(400).json({ message: `This leave type cannot be availed during notice period.` });
+      }
+
+      // 7. SICK LEAVE & MEDICAL CERTIFICATE
+      if (input.leaveType === 'sick' && finalDays >= 1 && !input.medicalCertificateUrl && !req.file) {
+        return res.status(400).json({ message: `Medical certificate is mandatory for Sick Leave of 1 or more days.` });
+      }
+
+      // 8. DUPLICATE DATE & CLUBBING VALIDATION
       const clubbingRules: Record<string, { can: string[]; cannot: string[] }> = {
         EL: { can: ["SL", "ML", "PL", "BL", "CO", "LOP"], cannot: ["CL"] },
         CL: { can: ["CO", "LOP"], cannot: ["EL", "SL", "ML", "PL", "BL"] },
@@ -1981,107 +1983,57 @@ export async function registerRoutes(
         LOP: { can: ["EL", "CL", "SL", "ML", "PL", "BL", "CO"], cannot: [] },
       };
 
-      const selectedCode = code;
-      const selectedRules = clubbingRules[selectedCode];
-      if (selectedRules) {
-        for (const existing of activeLeaves) {
+      const selectedRules = clubbingRules[code];
+      const newHalf = (input.halfDayPeriod || '').toLowerCase();
+
+      for (const existing of activeLeaves) {
+        const exStart = new Date(existing.startDate);
+        const exEnd = new Date(existing.endDate);
+        
+        if (startDate <= exEnd && endDate >= exStart) {
+          const exIsHalf = !!existing.halfDayPeriod || parseFloat(existing.days || '0') === 0.5;
+          const exHalf = (existing.halfDayPeriod || '').toLowerCase();
+          const sameSingleDate = startDate.getTime() === endDate.getTime() && exStart.getTime() === exEnd.getTime() && startDate.getTime() === exStart.getTime();
+
+          if (sameSingleDate && newIsHalf && exIsHalf && newHalf && exHalf && newHalf !== exHalf) {
+            if (input.leaveType.toLowerCase() !== existing.leaveType?.toLowerCase()) {
+              return res.status(400).json({ message: `Both halves of the day must be the same leave type.` });
+            }
+            continue; 
+          }
+
           const existingCode = leaveTypeMap[(existing.leaveType || '').toLowerCase()] || String(existing.leaveType || '').toUpperCase();
-          if (existingCode === selectedCode) continue;
-          if (selectedRules.cannot.includes(existingCode)) {
-            return res.status(400).json({
-              message: `Can't apply ${selectedCode} when ${existingCode} is already applied for the same date because these leave types cannot be clubbed.`,
-            });
+          if (selectedRules?.cannot.includes(existingCode)) {
+            return res.status(400).json({ message: `Can't apply ${code} with ${existingCode} (Clubbing Policy).` });
           }
-          if (selectedRules.can.length > 0 && !selectedRules.can.includes(existingCode)) {
-            return res.status(400).json({
-              message: `Can't apply ${selectedCode} with ${existingCode} for the same date because these leave types cannot be clubbed.`,
-            });
-          }
+          return res.status(400).json({ message: `Overlap detected with a ${existing.status} request.` });
         }
       }
 
-      // --- Probation & eligibility validation ---
-      const leaveEmployee = await storage.getEmployee(input.employeeId);
-      if (leaveEmployee) {
-        const isProbation = (leaveEmployee.employmentStatus || '').toLowerCase() === 'probation';
-        const joinDate = leaveEmployee.joinDate ? new Date(leaveEmployee.joinDate) : null;
-        const today = new Date();
-        const daysSinceJoining = joinDate ? Math.floor((today.getTime() - joinDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
+      // 9. SAVE TO DATABASE
+      const leave = await storage.createLeaveRequest({
+        ...input,
+        days: finalDays.toString(),
+        leaveTypeId: matchedType?.id || null,
+        status: 'pending'
+      });
 
-        const paidLeaveTypes = ['earned', 'paternity', 'maternity', 'bereavement'];
-        if (isProbation && paidLeaveTypes.includes(input.leaveType)) {
-          return res.status(400).json({ 
-            message: `Employees on probation cannot avail ${input.leaveType} leave. Only Casual Leave (CL), Sick Leave (SL), Comp Off (CO), and Loss of Pay (LOP) are available during probation.` 
-          });
-        }
+      res.status(201).json(leave);
 
-        const daysSinceJoiningAtStart = joinDate ? Math.floor((startDate.getTime() - joinDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
-        if (input.leaveType === 'earned' && daysSinceJoiningAtStart < 180) {
-          const eligibilityDate = joinDate ? new Date(joinDate.getTime() + 180 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] : 'N/A';
-          return res.status(400).json({ 
-            message: `Earned Leave (EL) is only available after completing 180 days of service (as per the Factories Act). You will be eligible from ${eligibilityDate}.` 
-          });
-        }
-
-        const exitRes = await pool.query(
-          `SELECT id FROM exit_records WHERE employee_id = $1 AND clearance_status != 'completed'`,
-          [input.employeeId]
-        );
-        const isOnNotice = exitRes.rows.length > 0;
-
-        if (isOnNotice && ['earned', 'casual', 'comp_off'].includes(input.leaveType)) {
-          const labelMap: Record<string, string> = { earned: 'Earned Leave (EL)', casual: 'Casual Leave (CL)', comp_off: 'Comp Off (CO)' };
-          return res.status(400).json({
-            message: `${labelMap[input.leaveType]} cannot be availed during notice period. As per company policy, this leave type is not allowed after resignation/separation has been initiated.`
-          });
-        }
-
-        if (isOnNotice && ['sick', 'bereavement', 'lop'].includes(input.leaveType)) {
-          (input as any).requiresVpApproval = true;
-        }
-
-      if (input.leaveType === 'sick' && days >= 1 && !input.medicalCertificateUrl && !req.file) {
-          return res.status(400).json({
-          message: `Medical certificate is mandatory for Sick Leave (SL) of 1 or more consecutive days. Please upload a medical certificate to proceed.`
-          });
-        }
-
-        if (input.leaveType === 'casual' && days > 2) {
-          if (daysSinceJoiningAtStart < 180) {
-            return res.status(400).json({
-              message: `Casual Leave (CL) cannot exceed 2 days at a time. Since you are not yet eligible for EL (requires 180 days of service), please reduce the duration to 2 days or less.`
-            });
-          }
-          input.leaveType = 'earned';
-          (input as any).autoConverted = true;
-        }
+      // 10. NOTIFICATIONS
+      const empName = `${leaveEmployee.firstName} ${leaveEmployee.lastName || ''}`.trim();
+      if (leaveEmployee.reportingManagerId) {
+         storage.getEmployees().then(allEmps => {
+           const rm = allEmps.find(e => e.employeeCode === leaveEmployee.reportingManagerId);
+           if (rm?.email) sendLeaveRequestEmail(rm.email, rm.firstName, empName, input.leaveType, input.startDate, input.endDate, input.reason || '').catch(console.error);
+         });
       }
 
-      const leaveTypeMap: Record<string, string> = {
-        earned: "EL", casual: "CL", sick: "SL",
-        bereavement: "BL", paternity: "PL", comp_off: "CO", lop: "LOP"
-      };
-      const code = leaveTypeMap[input.leaveType] || input.leaveType.toUpperCase();
-      const allTypes = await storage.getLeaveTypes();
-      const matchedType = allTypes.find(t => t.code === code);
-      const currentTypeRules = LEAVE_TYPE_RULES[code];
-
-      if (currentTypeRules) {
-        for (const existing of activeLeaves) {
-          const existingCode = leaveTypeMap[(existing.leaveType || '').toLowerCase()] || String(existing.leaveType || '').toUpperCase();
-          if (existingCode === code) continue;
-          if (currentTypeRules.cannot.includes(existingCode)) {
-            return res.status(400).json({
-              message: `Can't apply ${code} with ${existingCode} because these leave types cannot be clubbed.`
-            });
-          }
-          if (currentTypeRules.can.length > 0 && !currentTypeRules.can.includes(existingCode)) {
-            return res.status(400).json({
-              message: `Can't apply ${code} with ${existingCode} because these leave types cannot be clubbed.`
-            });
-          }
-        }
-      }
+    } catch (err: any) {
+      console.error("Leave creation error:", err.message);
+      res.status(500).json({ message: err.message });
+    }
+  });
 
       // --- Balance check: ensure requested days don't exceed available balance ---
       // Skip for LOP (loss of pay has no balance) and Comp Off (handled separately).
