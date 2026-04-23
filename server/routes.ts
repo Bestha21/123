@@ -1141,7 +1141,7 @@ export async function registerRoutes(
       });
     } catch (e) { console.error("Attendance log error:", e); }
 
-    if (parseFloat(workHours) > 9) {
+    /*if (parseFloat(workHours) > 9) {
       const overtimeHrs = (parseFloat(workHours) - 9).toFixed(2);
       try {
         await storage.createOvertimeRequest({
@@ -1152,12 +1152,12 @@ export async function registerRoutes(
           status: "pending",
         });
       } catch (e) {}
-    }
+    }*/
 
     res.json(att);
 
     // Fire-and-forget: notify employee if overtime detected
-    if (parseFloat(workHours) > 9) {
+   /* if (parseFloat(workHours) > 9) {
       try {
         const emp = await storage.getEmployee(employeeId);
         if (emp?.email) {
@@ -1167,7 +1167,7 @@ export async function registerRoutes(
           sendAttendanceAlertEmail(emp.email, empName, 'overtime', detail).catch(() => {});
         }
       } catch (e) { console.error("Overtime notification error:", e); }
-    }
+    }*/
   });
 
   app.get("/api/attendance/cycle-stats", async (req, res) => {
