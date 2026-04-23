@@ -33,13 +33,13 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback } from "react";
 import { ESSPayslipView } from "@/components/ESSPayslipView";
 import { useEssLayout, getEssLayoutOptions } from "@/lib/themeContext";
-import EmployeeSelfServiceBento from "./EmployeeSelfServiceBento";
+//import EmployeeSelfServiceBento from "./EmployeeSelfServiceBento";//hide bento 1
 import { LayoutGrid, List } from "lucide-react";
 
 function EmployeeSelfServiceClassic() {
   const [essLayout, setEssLayout] = useEssLayout();
   const layoutOptions = getEssLayoutOptions();
-  //if (essLayout === "bento") return <EmployeeSelfServiceBento />;
+  //if (essLayout === "bento") return <EmployeeSelfServiceBento />;hide bento 5
 
   const { user } = useAuth();
   const { toast } = useToast();
@@ -937,7 +937,8 @@ function EmployeeSelfServiceClassic() {
     <h1 className="text-xl sm:text-2xl font-bold text-foreground">Employee Self Service</h1>
     <p className="text-xs sm:text-sm text-muted-foreground">Manage your HR activities and complete onboarding</p>
     <p className="text-muted-foreground mt-1 text-sm">Welcome, {user?.firstName || 'Employee'}</p>
-    {layoutOptions.length > 1 && (
+	//hide bento 2
+		{/*{layoutOptions.length > 1 && (
       <div className="mt-2 inline-flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
         <button
           onClick={() => setEssLayout("classic")}
@@ -946,15 +947,15 @@ function EmployeeSelfServiceClassic() {
         >
           <List className="w-3.5 h-3.5" /> Classic
         </button>
-        <button
+		 <button
           onClick={() => setEssLayout("bento")}
           className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${essLayout === "bento" ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
           data-testid="button-layout-bento"
         >
           <LayoutGrid className="w-3.5 h-3.5" /> Bento
-        </button>
+        </button>}
       </div>
-    )}
+)}*/}
   </div>
         {currentEmployee && !currentEmployee.attendanceExempt && (
           <div className="hidden sm:flex gap-3 items-center">
@@ -4644,7 +4645,7 @@ function EmployeeSelfServiceClassic() {
 }
 export default function EmployeeSelfService() {
   const [essLayout] = useEssLayout();
-  if (essLayout === "bento") return <EmployeeSelfServiceBento />;
+ // if (essLayout === "bento") return <EmployeeSelfServiceBento />;
   return <EmployeeSelfServiceClassic />;
 }
 
