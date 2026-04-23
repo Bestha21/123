@@ -404,7 +404,7 @@ export default function Leaves() {
       }
 
       const formData = new FormData();
-      formData.append("employeeId", String(Number(currentEmployee.id)));
+      formData.append("employeeId", String(currentEmployee.id));
       formData.append("leaveType", leaveType);
       formData.append("startDate", startDate);
       formData.append("endDate", endDate);
