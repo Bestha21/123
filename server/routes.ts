@@ -1125,7 +1125,7 @@ export async function registerRoutes(
       checkOutLatitude: latitude,
       checkOutLongitude: longitude,
       workHours: workHours,
-      overtime: "0",
+      overtime: parseFloat(workHours) > 9 ? (parseFloat(workHours) - 9).toFixed(2) : "0",
       status
     });
 
@@ -1141,7 +1141,33 @@ export async function registerRoutes(
       });
     } catch (e) { console.error("Attendance log error:", e); }
 
+    /*if (parseFloat(workHours) > 9) {
+      const overtimeHrs = (parseFloat(workHours) - 9).toFixed(2);
+      try {
+        await storage.createOvertimeRequest({
+          employeeId,
+          date: today,
+          overtimeHours: overtimeHrs,
+          reason: "Auto-detected: worked beyond standard shift hours",
+          status: "pending",
+        });
+      } catch (e) {}
+    }*/
+
     res.json(att);
+
+    // Fire-and-forget: notify employee if overtime detected
+   /* if (parseFloat(workHours) > 9) {
+      try {
+        const emp = await storage.getEmployee(employeeId);
+        if (emp?.email) {
+          const empName = `${emp.firstName} ${emp.lastName || ''}`.trim();
+          const otHrs = (parseFloat(workHours) - 9).toFixed(2);
+          const detail = `You worked <strong>${workHours} hours</strong> on ${today}, which includes <strong>${otHrs} hours</strong> of overtime. An overtime request has been auto-created for approval.`;
+          sendAttendanceAlertEmail(emp.email, empName, 'overtime', detail).catch(() => {});
+        }
+      } catch (e) { console.error("Overtime notification error:", e); }
+    }*/
   });
 
   app.get("/api/attendance/cycle-stats", async (req, res) => {
@@ -1891,10 +1917,9 @@ export async function registerRoutes(
     res.json(leaves);
   });
 
-  app.post(api.leave.create.path, upload.single("medicalCertificateFile"), async (req, res) => {
+  app.post(api.leave.create.path, async (req, res) => {
     try {
-      const body = req.body as any;
-      const input = api.leave.create.input.parse(body);
+      const input = api.leave.create.input.parse(req.body);
       const startDate = new Date(input.startDate);
       const endDate = new Date(input.endDate);
 
@@ -1959,36 +1984,6 @@ export async function registerRoutes(
         }
       }
 
-      const clubbingRules: Record<string, { can: string[]; cannot: string[] }> = {
-        EL: { can: ["SL", "ML", "PL", "BL", "CO", "LOP"], cannot: ["CL"] },
-        CL: { can: ["CO", "LOP"], cannot: ["EL", "SL", "ML", "PL", "BL"] },
-        SL: { can: ["EL", "ML", "PL", "BL", "CO", "LOP"], cannot: ["CL"] },
-        ML: { can: ["EL", "SL", "BL", "CO", "LOP"], cannot: ["CL", "PL"] },
-        PL: { can: ["EL", "SL", "BL", "CO", "LOP"], cannot: ["ML", "CL"] },
-        BL: { can: ["EL", "SL", "ML", "PL", "CO", "LOP"], cannot: ["CL"] },
-        CO: { can: ["EL", "CL", "SL", "ML", "PL", "BL", "LOP"], cannot: [] },
-        LOP: { can: ["EL", "CL", "SL", "ML", "PL", "BL", "CO"], cannot: [] },
-      };
-
-      const selectedCode = code;
-      const selectedRules = clubbingRules[selectedCode];
-      if (selectedRules) {
-        for (const existing of activeLeaves) {
-          const existingCode = leaveTypeMap[(existing.leaveType || '').toLowerCase()] || String(existing.leaveType || '').toUpperCase();
-          if (existingCode === selectedCode) continue;
-          if (selectedRules.cannot.includes(existingCode)) {
-            return res.status(400).json({
-              message: `Can't apply ${selectedCode} when ${existingCode} is already applied for the same date because these leave types cannot be clubbed.`,
-            });
-          }
-          if (selectedRules.can.length > 0 && !selectedRules.can.includes(existingCode)) {
-            return res.status(400).json({
-              message: `Can't apply ${selectedCode} with ${existingCode} for the same date because these leave types cannot be clubbed.`,
-            });
-          }
-        }
-      }
-
       // --- Probation & eligibility validation ---
       const leaveEmployee = await storage.getEmployee(input.employeeId);
       if (leaveEmployee) {
@@ -2029,9 +2024,9 @@ export async function registerRoutes(
           (input as any).requiresVpApproval = true;
         }
 
-      if (input.leaveType === 'sick' && days >= 1 && !input.medicalCertificateUrl && !req.file) {
+        if (input.leaveType === 'sick' && days >= 2 && !input.medicalCertificateUrl) {
           return res.status(400).json({
-          message: `Medical certificate is mandatory for Sick Leave (SL) of 1 or more consecutive days. Please upload a medical certificate to proceed.`
+            message: `Medical certificate is mandatory for Sick Leave (SL) of 2 or more consecutive days. Please upload a medical certificate to proceed.`
           });
         }
 
@@ -2053,24 +2048,6 @@ export async function registerRoutes(
       const code = leaveTypeMap[input.leaveType] || input.leaveType.toUpperCase();
       const allTypes = await storage.getLeaveTypes();
       const matchedType = allTypes.find(t => t.code === code);
-      const currentTypeRules = LEAVE_TYPE_RULES[code];
-
-      if (currentTypeRules) {
-        for (const existing of activeLeaves) {
-          const existingCode = leaveTypeMap[(existing.leaveType || '').toLowerCase()] || String(existing.leaveType || '').toUpperCase();
-          if (existingCode === code) continue;
-          if (currentTypeRules.cannot.includes(existingCode)) {
-            return res.status(400).json({
-              message: `Can't apply ${code} with ${existingCode} because these leave types cannot be clubbed.`
-            });
-          }
-          if (currentTypeRules.can.length > 0 && !currentTypeRules.can.includes(existingCode)) {
-            return res.status(400).json({
-              message: `Can't apply ${code} with ${existingCode} because these leave types cannot be clubbed.`
-            });
-          }
-        }
-      }
 
       // --- Balance check: ensure requested days don't exceed available balance ---
       // Skip for LOP (loss of pay has no balance) and Comp Off (handled separately).
@@ -3662,7 +3639,7 @@ export async function registerRoutes(
     res.status(201).json(task);
   });
 
-  app.patch("/api/clearance-tasks/:id", async (req, res) => {
+   app.patch("/api/clearance-tasks/:id", async (req, res) => {
     const { status, remarks } = req.body;
     const updates: any = { status };
     if (remarks !== undefined) updates.remarks = remarks;
