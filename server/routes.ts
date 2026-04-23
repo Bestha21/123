@@ -1894,7 +1894,11 @@ export async function registerRoutes(
   app.post(api.leave.create.path, upload.single("medicalCertificateFile"), async (req, res) => {
     try {
       const body = req.body as any;
-      const input = api.leave.create.input.parse(body);
+      const input = api.leave.create.input.parse({
+        ...body,
+        employeeId: Number(body.employeeId),
+        days: body.days !== undefined ? String(body.days) : undefined,
+      });
       const startDate = new Date(input.startDate);
       const endDate = new Date(input.endDate);
 
