@@ -1891,9 +1891,10 @@ export async function registerRoutes(
     res.json(leaves);
   });
 
-  app.post(api.leave.create.path, async (req, res) => {
+  app.post(api.leave.create.path, upload.single("medicalCertificateFile"), async (req, res) => {
     try {
-      const input = api.leave.create.input.parse(req.body);
+      const body = req.body as any;
+      const input = api.leave.create.input.parse(body);
       const startDate = new Date(input.startDate);
       const endDate = new Date(input.endDate);
 
@@ -2028,9 +2029,9 @@ export async function registerRoutes(
           (input as any).requiresVpApproval = true;
         }
 
-        if (input.leaveType === 'sick' && days >= 2 && !input.medicalCertificateUrl) {
+      if (input.leaveType === 'sick' && days >= 1 && !input.medicalCertificateUrl && !req.file) {
           return res.status(400).json({
-            message: `Medical certificate is mandatory for Sick Leave (SL) of 2 or more consecutive days. Please upload a medical certificate to proceed.`
+          message: `Medical certificate is mandatory for Sick Leave (SL) of 1 or more consecutive days. Please upload a medical certificate to proceed.`
           });
         }
 
