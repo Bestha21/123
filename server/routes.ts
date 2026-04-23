@@ -1891,14 +1891,20 @@ export async function registerRoutes(
     res.json(leaves);
   });
 
-  app.post(api.leave.create.path, upload.single("medicalCertificateFile"), async (req, res) => {
-    try {
-      const body = req.body as any;
-      const input = api.leave.create.input.parse({
-        ...body,
-        employeeId: Number(body.employeeId),
-        days: body.days !== undefined ? String(body.days) : undefined,
-      });
+ app.post(api.leave.create.path, upload.single("medicalCertificateFile"), async (req, res) => {
+  try {
+    const body = req.body as any;
+
+    // 1. Prepare the data (Coerce strings from FormData back to proper types)
+    const sanitizedInput = {
+      ...body,
+      employeeId: body.employeeId ? Number(body.employeeId) : undefined,
+      // Days needs to be a string for your schema, but handled safely
+      days: body.days !== undefined ? String(body.days) : undefined,
+    };
+
+    // 2. Parse/Validate using your Zod schema
+    const input = api.leave.create.input.parse(sanitizedInput);
       const startDate = new Date(input.startDate);
       const endDate = new Date(input.endDate);
 
