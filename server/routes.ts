@@ -1884,119 +1884,121 @@ export async function registerRoutes(
   });
 
   // Leaves
-  app.post(api.leave.create.path, upload.single("medicalCertificateFile"), async (req, res) => {
+  app.get(api.leave.list.path, async (req, res) => {
+    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const status = req.query.status as string | undefined;
+    const leaves = await storage.getLeaveRequests(employeeId, status);
+    res.json(leaves);
+  });
+
+ app.post(api.leave.create.path, upload.single("medicalCertificateFile"), async (req, res) => {
   try {
     const body = req.body as any;
 
-    // 1. Sanitize and Coerce types from FormData
+    // 1. Prepare the data (Coerce strings from FormData back to proper types)
     const sanitizedInput = {
       ...body,
       employeeId: body.employeeId ? Number(body.employeeId) : undefined,
+      // Days needs to be a string for your schema, but handled safely
       days: body.days !== undefined ? String(body.days) : undefined,
     };
 
     // 2. Parse/Validate using your Zod schema
     const input = api.leave.create.input.parse(sanitizedInput);
 
-    // 3. FETCH DATA FIRST (Crucial to avoid 'before initialization' errors)
-    const [existingLeaves, allHolidays, allLeaveTypes] = await Promise.all([
-      storage.getLeaveRequests(input.employeeId),
-      storage.getHolidays(),
-      storage.getLeaveTypes()
-    ]);
+      const startDate = new Date(input.startDate);
+      const endDate = new Date(input.endDate);
 
-    const activeLeaves = existingLeaves.filter(l => l.status === 'pending' || l.status === 'approved');
-    const holidayDates = new Set(allHolidays.map(h => h.date));
-
-    // 4. Mappings and Rules
-    const leaveTypeMap: Record<string, string> = {
-      earned: "EL", casual: "CL", sick: "SL",
-      bereavement: "BL", paternity: "PL", maternity: "ML", comp_off: "CO", lop: "LOP"
-    };
-    
-    const code = leaveTypeMap[input.leaveType] || input.leaveType.toUpperCase();
-    const matchedType = allLeaveTypes.find(t => t.code === code);
-
-    const clubbingRules: Record<string, { can: string[]; cannot: string[] }> = {
-      EL: { can: ["SL", "ML", "PL", "BL", "CO", "LOP"], cannot: ["CL"] },
-      CL: { can: ["CO", "LOP"], cannot: ["EL", "SL", "ML", "PL", "BL"] },
-      SL: { can: ["EL", "ML", "PL", "BL", "CO", "LOP"], cannot: ["CL"] },
-      ML: { can: ["EL", "SL", "BL", "CO", "LOP"], cannot: ["CL", "PL"] },
-      PL: { can: ["EL", "SL", "BL", "CO", "LOP"], cannot: ["ML", "CL"] },
-      BL: { can: ["EL", "SL", "ML", "PL", "CO", "LOP"], cannot: ["CL"] },
-      CO: { can: ["EL", "CL", "SL", "ML", "PL", "BL", "LOP"], cannot: [] },
-      LOP: { can: ["EL", "CL", "SL", "ML", "PL", "BL", "CO"], cannot: [] },
-    };
-
-    // 5. Validation Logic (Clubbing and Overlaps)
-    const selectedRules = clubbingRules[code];
-    const startDate = new Date(input.startDate);
-    const endDate = new Date(input.endDate);
-    
-    // Check Overlaps and Half-Day rules
-    const newIsHalf = !!input.halfDayPeriod || parseFloat(input.days || '0') === 0.5;
-    const newHalf = (input.halfDayPeriod || '').toLowerCase();
-
-    for (const existing of activeLeaves) {
-      const exStart = new Date(existing.startDate);
-      const exEnd = new Date(existing.endDate);
-      
-      if (startDate <= exEnd && endDate >= exStart) {
-        const exIsHalf = !!existing.halfDayPeriod || parseFloat(existing.days || '0') === 0.5;
-        const exHalf = (existing.halfDayPeriod || '').toLowerCase();
-        const sameSingleDate = startDate.getTime() === endDate.getTime() && 
-                             exStart.getTime() === exEnd.getTime() && 
-                             startDate.getTime() === exStart.getTime();
-
-        if (sameSingleDate && newIsHalf && exIsHalf && newHalf && exHalf && newHalf !== exHalf) {
-          if (input.leaveType.toLowerCase() !== existing.leaveType?.toLowerCase()) {
-            return res.status(400).json({ message: `Both halves of the day must be the same leave type.` });
+      const allHolidays = await storage.getHolidays();
+      const holidayDates = new Set(allHolidays.map(h => h.date));
+      let computedDays = 0;
+      if (input.days && parseFloat(input.days) === 0.5) {
+        computedDays = 0.5;
+      } else {
+        const cursor = new Date(startDate);
+        while (cursor <= endDate) {
+          const dow = cursor.getDay();
+          const dateStr = cursor.toISOString().split('T')[0];
+          if (dow !== 0 && dow !== 6 && !holidayDates.has(dateStr)) {
+            computedDays++;
           }
-          continue; // Allowed same date opposite half
+          cursor.setDate(cursor.getDate() + 1);
         }
+      }
+      let days = computedDays > 0 ? computedDays : (input.days ? parseFloat(input.days) : Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
 
-        // Check clubbing if on the same date but different types
-        const existingCode = leaveTypeMap[(existing.leaveType || '').toLowerCase()] || String(existing.leaveType || '').toUpperCase();
-        if (selectedRules?.cannot.includes(existingCode)) {
-          return res.status(400).json({ message: `Can't apply ${code} with ${existingCode} (Clubbing Policy).` });
+      // --- Duplicate leave date validation ---
+      // Allow same-date overlap when both leaves are half-day on opposite halves
+      // (e.g. CL first_half + SL second_half on the same date is allowed).
+      const existingLeaves = await storage.getLeaveRequests(input.employeeId);
+      const activeLeaves = existingLeaves.filter(l => l.status === 'pending' || l.status === 'approved');
+      const newIsHalf = !!input.halfDayPeriod || (input.days !== undefined && parseFloat(input.days as any) === 0.5);
+      const newHalf = (input.halfDayPeriod || '').toLowerCase();
+      for (const existing of activeLeaves) {
+        const exStart = new Date(existing.startDate);
+        const exEnd = new Date(existing.endDate);
+        if (startDate <= exEnd && endDate >= exStart) {
+          const exIsHalf = !!existing.halfDayPeriod || parseFloat(existing.days || '0') === 0.5;
+          const exHalf = (existing.halfDayPeriod || '').toLowerCase();
+          // Same single date AND both half-day AND opposite halves => allow
+          const sameSingleDate =
+            startDate.getTime() === endDate.getTime() &&
+            exStart.getTime() === exEnd.getTime() &&
+            startDate.getTime() === exStart.getTime();
+          if (
+            sameSingleDate &&
+            newIsHalf &&
+            exIsHalf &&
+            newHalf &&
+            exHalf &&
+            newHalf !== exHalf
+          ) {
+            // Opposite halves on same date: allowed only when BOTH halves are
+            // the SAME leave type (any type — CL+CL, SL+SL, BL+BL, etc.).
+            const newType = (input.leaveType || '').toLowerCase();
+            const exType = (existing.leaveType || '').toLowerCase();
+            if (newType === exType) {
+              continue; // allowed
+            }
+            return res.status(400).json({
+              message: `Can't apply different leave for the same day. Both halves must be the same leave type.`
+            });
+          }
+          return res.status(400).json({ 
+            message: `You already have a ${existing.status} leave request (${existing.leaveType}) from ${existing.startDate} to ${existing.endDate} that overlaps with these dates.` 
+          });
         }
-
-        return res.status(400).json({ message: `Overlap detected with a ${existing.status} ${existing.leaveType} request.` });
       }
-    }
 
-    // 6. Calculate Net Days (Exclude Weekends/Holidays)
-    let computedDays = 0;
-    if (newIsHalf) {
-      computedDays = 0.5;
-    } else {
-      const cursor = new Date(startDate);
-      while (cursor <= endDate) {
-        const dow = cursor.getDay();
-        const dStr = cursor.toISOString().split('T')[0];
-        if (dow !== 0 && dow !== 6 && !holidayDates.has(dStr)) computedDays++;
-        cursor.setDate(cursor.getDate() + 1);
+      const clubbingRules: Record<string, { can: string[]; cannot: string[] }> = {
+        EL: { can: ["SL", "ML", "PL", "BL", "CO", "LOP"], cannot: ["CL"] },
+        CL: { can: ["CO", "LOP"], cannot: ["EL", "SL", "ML", "PL", "BL"] },
+        SL: { can: ["EL", "ML", "PL", "BL", "CO", "LOP"], cannot: ["CL"] },
+        ML: { can: ["EL", "SL", "BL", "CO", "LOP"], cannot: ["CL", "PL"] },
+        PL: { can: ["EL", "SL", "BL", "CO", "LOP"], cannot: ["ML", "CL"] },
+        BL: { can: ["EL", "SL", "ML", "PL", "CO", "LOP"], cannot: ["CL"] },
+        CO: { can: ["EL", "CL", "SL", "ML", "PL", "BL", "LOP"], cannot: [] },
+        LOP: { can: ["EL", "CL", "SL", "ML", "PL", "BL", "CO"], cannot: [] },
+      };
+
+      const selectedCode = code;
+      const selectedRules = clubbingRules[selectedCode];
+      if (selectedRules) {
+        for (const existing of activeLeaves) {
+          const existingCode = leaveTypeMap[(existing.leaveType || '').toLowerCase()] || String(existing.leaveType || '').toUpperCase();
+          if (existingCode === selectedCode) continue;
+          if (selectedRules.cannot.includes(existingCode)) {
+            return res.status(400).json({
+              message: `Can't apply ${selectedCode} when ${existingCode} is already applied for the same date because these leave types cannot be clubbed.`,
+            });
+          }
+          if (selectedRules.can.length > 0 && !selectedRules.can.includes(existingCode)) {
+            return res.status(400).json({
+              message: `Can't apply ${selectedCode} with ${existingCode} for the same date because these leave types cannot be clubbed.`,
+            });
+          }
+        }
       }
-    }
-    const finalDays = computedDays > 0 ? computedDays : 1;
-
-    // 7. Save to Database
-    const leave = await storage.createLeaveRequest({
-      ...input,
-      days: finalDays.toString(),
-      leaveTypeId: matchedType?.id || null,
-      status: 'pending'
-    });
-
-    res.status(201).json(leave);
-
-  } catch (err: any) {
-    console.error("Leave creation error:", err.message);
-    res.status(500).json({ message: err.message });
-  }
-});
-
-      
 
       // --- Probation & eligibility validation ---
       const leaveEmployee = await storage.getEmployee(input.employeeId);
@@ -2055,7 +2057,11 @@ export async function registerRoutes(
         }
       }
 
-      
+      const leaveTypeMap: Record<string, string> = {
+        earned: "EL", casual: "CL", sick: "SL",
+        bereavement: "BL", paternity: "PL", comp_off: "CO", lop: "LOP"
+      };
+      const code = leaveTypeMap[input.leaveType] || input.leaveType.toUpperCase();
       const allTypes = await storage.getLeaveTypes();
       const matchedType = allTypes.find(t => t.code === code);
       const currentTypeRules = LEAVE_TYPE_RULES[code];
