@@ -937,7 +937,7 @@ function EmployeeSelfServiceClassic() {
     <h1 className="text-xl sm:text-2xl font-bold text-foreground">Employee Self Service</h1>
     <p className="text-xs sm:text-sm text-muted-foreground">Manage your HR activities and complete onboarding</p>
     <p className="text-muted-foreground mt-1 text-sm">Welcome, {user?.firstName || 'Employee'}</p>
-	//hide bento 2
+	
 		{/*{layoutOptions.length > 1 && (
       <div className="mt-2 inline-flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
         <button
