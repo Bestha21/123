@@ -115,6 +115,7 @@ export default function Leaves() {
   const [endDate, setEndDate] = useState("");
   const [reason, setReason] = useState("");
   const [medicalCertificateUrl, setMedicalCertificateUrl] = useState("");
+  const [medicalCertificateFile, setMedicalCertificateFile] = useState<File | null>(null);
   const [isHalfDay, setIsHalfDay] = useState(false);
   const [halfDayPeriod, setHalfDayPeriod] = useState("first_half");
   const [rejectRemarks, setRejectRemarks] = useState("");
@@ -231,7 +232,7 @@ export default function Leaves() {
           if (existingYear !== currentYear) latestByType[bal.leaveTypeId] = bal;
         }
       }
-                  for (const bal of Object.values(latestByType)) {
+      for (const bal of Object.values(latestByType)) {
         const lt = leaveTypesDb.find(t => t.id === bal.leaveTypeId);
         if (lt) {
           const used = parseFloat(bal.used || "0");
@@ -329,7 +330,6 @@ export default function Leaves() {
 
   const leaveTypeOptions = BASE_LEAVE_TYPE_OPTIONS.filter(opt => {
     if (!opt.gender) {
-      if (isProbation && ['earned', 'paternity', 'bereavement'].includes(opt.value)) return false;
       if (opt.value === 'earned' && daysSinceJoining < 180) return false;
       if (opt.value === 'earned' && isOnNoticePeriod) return false;
       if (opt.value === 'casual' && isOnNoticePeriod) return false;
@@ -338,10 +338,8 @@ export default function Leaves() {
     }
     if (isAdmin) return true;
     if (employeeGender === 'female') {
-      if (opt.value === 'maternity' && isProbation) return false;
       return opt.gender === 'female';
     }
-    if (opt.value === 'paternity' && isProbation) return false;
     return opt.gender === 'male';
   });
 
@@ -352,7 +350,7 @@ export default function Leaves() {
     return p.gender === 'male';
   });
 
-    const LEAVE_TYPE_TO_CODE: Record<string, string> = {
+  const LEAVE_TYPE_TO_CODE: Record<string, string> = {
     earned: "EL", casual: "CL", sick: "SL",
     bereavement: "BL", paternity: "PL", maternity: "ML",
     comp_off: "CO", lop: "LOP",
@@ -396,16 +394,35 @@ export default function Leaves() {
         throw new Error("Sufficient leave balance not available to submit the request");
       }
 
-      const res = await apiRequest("POST", "/api/leaves", {
-        employeeId: currentEmployee.id,
-        leaveType,
-        startDate,
-        endDate,
-        reason: reason || "",
-        days: isHalfDay ? "0.5" : undefined,
-        halfDayPeriod: isHalfDay ? halfDayPeriod : undefined,
-        medicalCertificateUrl: leaveType === 'sick' ? medicalCertificateUrl : undefined,
+      if (leaveType === "sick" && !isHalfDay && startDate && endDate) {
+        const s = new Date(startDate);
+        const e = new Date(endDate);
+        const d = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        if (d >= 2 && !medicalCertificateUrl && !medicalCertificateFile) {
+          throw new Error("Medical certificate is required for 2+ sick leave days");
+        }
+      }
+
+      const formData = new FormData();
+      formData.append("employeeId", String(currentEmployee.id));
+      formData.append("leaveType", leaveType);
+      formData.append("startDate", startDate);
+      formData.append("endDate", endDate);
+      formData.append("reason", reason || "");
+      if (isHalfDay) formData.append("days", "0.5");
+      if (isHalfDay) formData.append("halfDayPeriod", halfDayPeriod);
+      if (leaveType === "sick" && medicalCertificateUrl) formData.append("medicalCertificateUrl", medicalCertificateUrl);
+      if (leaveType === "sick" && medicalCertificateFile) formData.append("medicalCertificateFile", medicalCertificateFile);
+
+      const res = await fetch("/api/leaves", {
+        method: "POST",
+        credentials: "include",
+        body: formData,
       });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ message: "Failed to submit leave" }));
+        throw new Error(err.message || "Failed to submit leave");
+      }
       return res;
     },
     onSuccess: () => {
@@ -417,6 +434,7 @@ export default function Leaves() {
       setEndDate("");
       setReason("");
       setMedicalCertificateUrl("");
+      setMedicalCertificateFile(null);
       setIsHalfDay(false);
       toast({ title: "Leave request submitted successfully" });
     },
@@ -677,12 +695,6 @@ export default function Leaves() {
               <DialogTitle>Apply for Leave</DialogTitle>
             </DialogHeader>
             <form className="space-y-4 mt-4" onSubmit={(e) => { e.preventDefault(); applyLeaveMutation.mutate(); }}>
-              {isProbation && (
-                <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-sm text-amber-800">
-                  <Shield className="w-4 h-4 inline mr-1" />
-                  You are on probation. Only Casual Leave (CL), Sick Leave (SL), Comp Off (CO), and Loss of Pay (LOP) are available.
-                </div>
-              )}
               {daysSinceJoining < 180 && !isProbation && (
                 <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm text-blue-800">
                   <Info className="w-4 h-4 inline mr-1" />
@@ -695,7 +707,7 @@ export default function Leaves() {
                   <SelectTrigger data-testid="select-leave-type">
                     <SelectValue placeholder="Select type" />
                   </SelectTrigger>
-                                    <SelectContent>
+                  <SelectContent>
                     {leaveTypeOptions.map(type => (
                       <SelectItem key={type.value} value={type.value}>
                         {type.label}
@@ -763,18 +775,26 @@ export default function Leaves() {
                 <div className="space-y-3">
                   <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-sm text-amber-800">
                     <AlertTriangle className="w-4 h-4 inline mr-1" />
-                    Medical certificate required for SL of 2+ days (MBBS/MD from registered hospital/clinic with proper sign and seal)
+                    Medical certificate required for SL of 1+ day (MBBS/MD from registered hospital/clinic with proper sign and seal)
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Medical Certificate URL / Reference {!isHalfDay && startDate && endDate && (() => { const s = new Date(startDate); const e = new Date(endDate); const d = Math.ceil((e.getTime()-s.getTime())/(1000*60*60*24))+1; return d >= 2 ? <span className="text-red-500">*</span> : null; })()}</label>
-                    <Input
-                      type="text"
-                      value={medicalCertificateUrl}
-                      onChange={(e) => setMedicalCertificateUrl(e.target.value)}
-                      placeholder="Paste document link or reference number"
-                      data-testid="input-medical-certificate"
-                    />
-                    <p className="text-xs text-muted-foreground">Required for 2+ consecutive days of Sick Leave</p>
+                    <div className="space-y-2">
+                      <Input
+                        type="text"
+                        value={medicalCertificateUrl}
+                        onChange={(e) => setMedicalCertificateUrl(e.target.value)}
+                        placeholder="Paste document link or reference number"
+                        data-testid="input-medical-certificate"
+                      />
+                      <Input
+                        type="file"
+                        accept="image/*,.pdf"
+                        onChange={(e) => setMedicalCertificateFile(e.target.files?.[0] || null)}
+                        data-testid="input-medical-certificate-file"
+                      />
+                    </div>
+                        <p className="text-xs text-muted-foreground">Required for 1+ consecutive day of Sick Leave</p>
                   </div>
                 </div>
               )}
