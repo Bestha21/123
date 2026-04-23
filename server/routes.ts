@@ -3639,7 +3639,7 @@ export async function registerRoutes(
     res.status(201).json(task);
   });
 
-  app.patch("/api/clearance-tasks/:id", async (req, res) => {
+   app.patch("/api/clearance-tasks/:id", async (req, res) => {
     const { status, remarks } = req.body;
     const updates: any = { status };
     if (remarks !== undefined) updates.remarks = remarks;
@@ -3649,6 +3649,23 @@ export async function registerRoutes(
       updates.completedAt = null;
     }
     const task = await storage.updateClearanceTask(Number(req.params.id), updates);
+
+    // If all clearance tasks for this exit record are completed, auto-mark
+    // the exit record as completed and deactivate the employee.
+    try {
+      const allTasks = await storage.getClearanceTasks(task.exitRecordId);
+      if (allTasks.length > 0 && allTasks.every(t => t.status === "completed")) {
+        const exitRecord = await storage.updateExitRecord(task.exitRecordId, {
+          clearanceStatus: "completed",
+        } as any);
+        if (exitRecord?.employeeId) {
+          await storage.updateEmployee(exitRecord.employeeId, { status: "inactive" } as any);
+        }
+      }
+    } catch (e) {
+      console.error("Auto exit-completion check failed:", e);
+    }
+
     res.json(task);
   });
 

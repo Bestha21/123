@@ -73,10 +73,30 @@ export async function setupAuth(app: Express) {
           if (!user.password) {
             return done(null, false, { message: "Please set up your password" });
           }
-          const isValid = await bcrypt.compare(password, user.password);
+                    const isValid = await bcrypt.compare(password, user.password);
           if (!isValid) {
             return done(null, false, { message: "Invalid email or password" });
           }
+
+          // Block login for exited / terminated employees
+          try {
+            const [emp] = await db
+              .select()
+              .from(employees)
+              .where(eq(employees.email, (user.email || '').toLowerCase().trim()));
+            if (emp) {
+              const status = (emp.status || emp.employmentStatus || '').toString().toLowerCase();
+              const blockedStatuses = ['inactive', 'terminated', 'exited', 'resigned', 'separated'];
+              if (blockedStatuses.includes(status)) {
+                return done(null, false, {
+                  message: "Your account has been deactivated. Please contact HR.",
+                });
+              }
+            }
+          } catch (e) {
+            console.error("Login status check failed:", e);
+          }
+
           return done(null, user);
         } catch (err) {
           return done(err);
