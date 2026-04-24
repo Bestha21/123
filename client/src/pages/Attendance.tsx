@@ -398,11 +398,10 @@ export default function AttendancePage() {
           <TabsTrigger value="log" data-testid="tab-log">Attendance Log</TabsTrigger>
           <TabsTrigger value="daily" data-testid="tab-daily">Today's Log</TabsTrigger>
           <TabsTrigger value="tracking" data-testid="tab-tracking">Late / Early</TabsTrigger>
-          <TabsTrigger value="overtime" data-testid="tab-overtime">Overtime</TabsTrigger>
           {hasReportees && <TabsTrigger value="sheet" data-testid="tab-sheet">Att. Sheet</TabsTrigger>}
           <TabsTrigger value="regularize" data-testid="tab-regularize">Regularization</TabsTrigger>
           <TabsTrigger value="onduty" data-testid="tab-onduty">On Duty</TabsTrigger>
-          <TabsTrigger value="calendar" data-testid="tab-calendar">Calendar</TabsTrigger>
+        // <TabsTrigger value="calendar" data-testid="tab-calendar">Calendar</TabsTrigger>
           {isAdminUser && <TabsTrigger value="policy" data-testid="tab-policy">Policy</TabsTrigger>}
         </TabsList>
 
@@ -1057,302 +1056,6 @@ export default function AttendancePage() {
           </div>
         </TabsContent>
 
-        <TabsContent value="overtime">
-          <div className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="pt-6 text-center">
-                  <Hourglass className="w-8 h-8 text-blue-500 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-foreground">{otSummary?.totalApprovedHours || 0}</div>
-                  <p className="text-sm text-muted-foreground">Approved OT Hours</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6 text-center">
-                  <Clock className="w-8 h-8 text-amber-500 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-foreground">{otSummary?.totalPendingHours || 0}</div>
-                  <p className="text-sm text-muted-foreground">Pending OT Hours</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6 text-center">
-                  <CheckCircle className="w-8 h-8 text-green-500 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-foreground">{otSummary?.totalApprovedCount || 0}</div>
-                  <p className="text-sm text-muted-foreground">Approved Requests</p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6 text-center">
-                  <AlertTriangle className="w-8 h-8 text-orange-500 mx-auto mb-2" />
-                  <div className="text-2xl font-bold text-foreground">{otSummary?.totalPendingCount || 0}</div>
-                  <p className="text-sm text-muted-foreground">Pending Approvals</p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {isAdminUser && otSummary?.employeeSummary?.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <TrendingUp className="w-5 h-5 text-primary" />
-                    Overtime Summary by Employee
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Employee</TableHead>
-                        <TableHead>Approved Hours</TableHead>
-                        <TableHead>Pending Hours</TableHead>
-                        <TableHead>Estimated OT Pay</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {otSummary.employeeSummary.map((emp: any) => (
-                        <TableRow key={emp.employeeId} data-testid={`ot-summary-row-${emp.employeeId}`}>
-                          <TableCell className="font-medium">{emp.employeeName}</TableCell>
-                          <TableCell>
-                            <Badge className="bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400">{emp.approvedHours}h</Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge className="bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400">{emp.pendingHours}h</Badge>
-                          </TableCell>
-                          <TableCell className="font-semibold text-green-600">₹{emp.estimatedPay.toLocaleString()}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="flex items-center gap-2 text-lg">
-                    <Hourglass className="w-5 h-5 text-primary" />
-                    {isAdminUser ? "All Overtime Requests" : "My Overtime Requests"}
-                  </CardTitle>
-                  <div className="flex items-center gap-2">
-                    <Select value={otFilter} onValueChange={setOtFilter}>
-                      <SelectTrigger className="w-[140px]" data-testid="select-ot-filter">
-                        <SelectValue placeholder="Filter" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">All</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
-                        <SelectItem value="approved">Approved</SelectItem>
-                        <SelectItem value="rejected">Rejected</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {isAdminUser && (
-                      <Button onClick={() => setShowOtDialog(true)} data-testid="button-add-overtime">
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add OT Request
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {otLoading ? (
-                  <div className="text-center py-8 text-muted-foreground">Loading...</div>
-                ) : !displayOT || displayOT.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Hourglass className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
-                    <p className="text-muted-foreground">No overtime requests found</p>
-                    <p className="text-sm text-muted-foreground/70 mt-1">Overtime is automatically tracked when employees work beyond the standard 9-hour shift.</p>
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        {isAdminUser && <TableHead>Employee</TableHead>}
-                        <TableHead>Date</TableHead>
-                        <TableHead>OT Hours</TableHead>
-                        <TableHead>Reason</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Remarks</TableHead>
-                        {isAdminUser && <TableHead>Actions</TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {displayOT.map((req: any) => {
-                        const emp = employees?.find(e => e.id === req.employeeId);
-                        return (
-                          <TableRow key={req.id} data-testid={`ot-row-${req.id}`}>
-                            {isAdminUser && (
-                              <TableCell className="font-medium">{emp ? `${emp.firstName} ${emp.lastName || ''}` : `ID ${req.employeeId}`}</TableCell>
-                            )}
-                            <TableCell>{format(new Date(req.date), "MMM dd, yyyy")}</TableCell>
-                            <TableCell>
-                              <Badge className="bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">
-                                {parseFloat(req.overtimeHours).toFixed(1)}h
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="max-w-[200px] truncate text-sm text-muted-foreground">{req.reason || '-'}</TableCell>
-                            <TableCell>
-                              <Badge className={
-                                req.status === 'approved' ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' :
-                                req.status === 'rejected' ? 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400' :
-                                'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400'
-                              }>
-                                {req.status}
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="text-sm text-muted-foreground">{req.remarks || '-'}</TableCell>
-                            {isAdminUser && (
-                              <TableCell>
-                                {req.status === 'pending' && (
-                                  <div className="flex items-center gap-1">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-green-600 hover:text-green-700"
-                                      disabled={updateOtMutation.isPending}
-                                      data-testid={`approve-ot-${req.id}`}
-                                      onClick={() => { setOtActionId(req.id); setOtActionType("approved"); }}
-                                    >
-                                      <CheckCircle className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      className="text-red-600 hover:text-red-700"
-                                      disabled={updateOtMutation.isPending}
-                                      data-testid={`reject-ot-${req.id}`}
-                                      onClick={() => { setOtActionId(req.id); setOtActionType("rejected"); }}
-                                    >
-                                      <XCircle className="w-4 h-4" />
-                                    </Button>
-                                  </div>
-                                )}
-                              </TableCell>
-                            )}
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                )}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Info className="w-5 h-5 text-primary" />
-                  Overtime Policy
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3 text-sm text-muted-foreground">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <p className="font-medium text-foreground mb-1">Standard Working Hours</p>
-                      <p>9 hours per day (09:30 AM - 06:30 PM)</p>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <p className="font-medium text-foreground mb-1">Overtime Rate</p>
-                      <p>1.5x the regular hourly rate</p>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <p className="font-medium text-foreground mb-1">Auto-Detection</p>
-                      <p>Overtime is automatically recorded when you work beyond 9 hours</p>
-                    </div>
-                    <div className="p-3 bg-muted/50 rounded-lg">
-                      <p className="font-medium text-foreground mb-1">Approval Required</p>
-                      <p>All overtime must be approved by admin before it reflects in payroll</p>
-                    </div>
-                  </div>
-                  <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                    <p className="font-medium text-blue-700 dark:text-blue-400 mb-1">Payroll Integration</p>
-                    <p className="text-blue-600 dark:text-blue-300">Approved overtime hours are automatically included in the monthly payroll calculation. OT Pay = Approved Hours × (Daily Rate / 9) × 1.5</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Dialog open={showOtDialog} onOpenChange={setShowOtDialog}>
-            <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Create Overtime Request</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-4 pt-2">
-                <div>
-                  <Label>Employee</Label>
-                  <Select value={otForm.employeeId} onValueChange={v => setOtForm({ ...otForm, employeeId: v })}>
-                    <SelectTrigger data-testid="select-ot-employee"><SelectValue placeholder="Select employee" /></SelectTrigger>
-                    <SelectContent>
-                      {employees?.filter(e => e.status === 'active').map(e => (
-                        <SelectItem key={e.id} value={String(e.id)}>{e.firstName} {e.lastName || ''}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <Label>Date</Label>
-                    <Input type="date" value={otForm.date} onChange={e => setOtForm({ ...otForm, date: e.target.value })} data-testid="input-ot-date" />
-                  </div>
-                  <div>
-                    <Label>OT Hours</Label>
-                    <Input type="number" step="0.5" min="0.5" value={otForm.overtimeHours} onChange={e => setOtForm({ ...otForm, overtimeHours: e.target.value })} placeholder="e.g. 2.5" data-testid="input-ot-hours" />
-                  </div>
-                </div>
-                <div>
-                  <Label>Reason</Label>
-                  <Textarea value={otForm.reason} onChange={e => setOtForm({ ...otForm, reason: e.target.value })} placeholder="Reason for overtime..." className="resize-none" data-testid="input-ot-reason" />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setShowOtDialog(false)}>Cancel</Button>
-                <Button
-                  disabled={!otForm.employeeId || !otForm.date || !otForm.overtimeHours || createOtMutation.isPending}
-                  onClick={() => createOtMutation.mutate({
-                    employeeId: Number(otForm.employeeId),
-                    date: otForm.date,
-                    overtimeHours: otForm.overtimeHours,
-                    reason: otForm.reason,
-                  })}
-                  data-testid="button-submit-ot"
-                >
-                  {createOtMutation.isPending ? "Creating..." : "Create Request"}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-
-          <Dialog open={!!otActionId} onOpenChange={(open) => { if (!open) { setOtActionId(null); setOtRemarks(""); } }}>
-            <DialogContent className="max-w-sm">
-              <DialogHeader>
-                <DialogTitle>{otActionType === 'approved' ? 'Approve' : 'Reject'} Overtime Request</DialogTitle>
-              </DialogHeader>
-              <div className="space-y-3 pt-2">
-                <div>
-                  <Label>Remarks (optional)</Label>
-                  <Textarea value={otRemarks} onChange={e => setOtRemarks(e.target.value)} placeholder="Add remarks..." className="resize-none" data-testid="input-ot-remarks" />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => { setOtActionId(null); setOtRemarks(""); }}>Cancel</Button>
-                <Button
-                  className={otActionType === 'approved' ? '' : 'bg-red-600 hover:bg-red-700'}
-                  disabled={updateOtMutation.isPending}
-                  onClick={() => {
-                    if (otActionId) updateOtMutation.mutate({ id: otActionId, status: otActionType, remarks: otRemarks });
-                  }}
-                  data-testid="button-confirm-ot-action"
-                >
-                  {updateOtMutation.isPending ? "Processing..." : otActionType === 'approved' ? 'Approve' : 'Reject'}
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </TabsContent>
-
         <TabsContent value="sheet">
           <AttendanceSheetTab isAdmin={isAdminUser || isHrUser} currentEmployee={currentEmployee} employees={employees || []} />
         </TabsContent>
@@ -1419,7 +1122,7 @@ function AttendanceLogTab({ currentEmployee, employees, isAdmin, shiftsData, all
     },
   });
 
-    const { data: leaveRequests } = useQuery<any[]>({
+  const { data: leaveRequests } = useQuery<any[]>({
     queryKey: ["/api/leaves"],
   });
 
@@ -1462,7 +1165,7 @@ function AttendanceLogTab({ currentEmployee, employees, isAdmin, shiftsData, all
       const weekOfMonth = Math.ceil(day.getDate() / 7);
       const wo = dayOfWeek === 0 || (dayOfWeek === 6 && (weekOfMonth === 2 || weekOfMonth === 4));
       const holiday = allHolidays?.find(h => h.date === dateStr);
-            const log = logAttendance?.find(l => l.employeeId === viewingEmpId && l.date === dateStr);
+      const log = logAttendance?.find(l => l.employeeId === viewingEmpId && l.date === dateStr);
       const dayLeaves = (leaveRequests || []).filter(lr =>
         lr.employeeId === viewingEmpId &&
         lr.status === 'approved' &&
@@ -2375,6 +2078,8 @@ function OnDutyTab({ isAdmin, currentEmployee }: { isAdmin: boolean; currentEmpl
   const [odType, setOdType] = useState("full_day");
   const [odFromTime, setOdFromTime] = useState("");
   const [odToTime, setOdToTime] = useState("");
+  const [odStartDate, setOdStartDate] = useState("");
+  const [odEndDate, setOdEndDate] = useState("");
 
   const { data: odRequests, isLoading } = useQuery<Array<any>>({
     queryKey: ["/api/on-duty-requests"],
@@ -2386,7 +2091,7 @@ function OnDutyTab({ isAdmin, currentEmployee }: { isAdmin: boolean; currentEmpl
       queryClient.invalidateQueries({ queryKey: ["/api/on-duty-requests"] });
       toast({ title: "On Duty request submitted successfully" });
       setShowForm(false);
-      setOdDate(""); setOdReason(""); setOdLocation(""); setOdType("full_day"); setOdFromTime(""); setOdToTime("");
+      setOdDate(""); setOdStartDate(""); setOdEndDate(""); setOdReason(""); setOdLocation(""); setOdType("full_day"); setOdFromTime(""); setOdToTime("");
     },
     onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
   });
@@ -2432,14 +2137,18 @@ function OnDutyTab({ isAdmin, currentEmployee }: { isAdmin: boolean; currentEmpl
         <CardContent>
           {showForm && (
             <div className="border rounded-lg p-4 mb-4 bg-slate-50 space-y-3">
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label className="text-xs">Date</Label>
-                  <Input type="date" value={odDate} onChange={e => setOdDate(e.target.value)} className="h-8 text-sm" data-testid="input-od-date" />
+                  <Label className="text-xs">Start Date</Label>
+                  <Input type="date" value={odStartDate} onChange={e => { setOdStartDate(e.target.value); if (odType === 'half_day') setOdEndDate(e.target.value); else if (!odEndDate || odEndDate < e.target.value) setOdEndDate(e.target.value); }} className="h-8 text-sm" data-testid="input-od-start-date" />
+                </div>
+                <div>
+                  <Label className="text-xs">End Date</Label>
+                  <Input type="date" value={odEndDate} min={odStartDate || undefined} disabled={odType === 'half_day'} onChange={e => setOdEndDate(e.target.value)} className="h-8 text-sm" data-testid="input-od-end-date" />
                 </div>
                 <div>
                   <Label className="text-xs">Type</Label>
-                  <Select value={odType} onValueChange={setOdType}>
+                  <Select value={odType} onValueChange={(v) => { setOdType(v); if (v === 'half_day') setOdEndDate(odStartDate); }}>
                     <SelectTrigger className="h-8 text-sm" data-testid="select-od-type"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="full_day">Full Day</SelectItem>
@@ -2468,9 +2177,17 @@ function OnDutyTab({ isAdmin, currentEmployee }: { isAdmin: boolean; currentEmpl
                 <Label className="text-xs">Reason</Label>
                 <Textarea value={odReason} onChange={e => setOdReason(e.target.value)} placeholder="Purpose of on-duty..." className="text-sm" rows={2} data-testid="input-od-reason" />
               </div>
+              {odStartDate && odEndDate && odEndDate >= odStartDate && (
+                <p className="text-xs text-muted-foreground">
+                  {(() => {
+                    const days = Math.floor((new Date(odEndDate).getTime() - new Date(odStartDate).getTime()) / (1000 * 60 * 60 * 24)) + 1;
+                    return `${days} day${days > 1 ? 's' : ''} will be requested.`;
+                  })()}
+                </p>
+              )}
               <div className="flex gap-2">
-                <Button size="sm" disabled={!odDate || !odReason.trim() || createOdMutation.isPending}
-                  onClick={() => createOdMutation.mutate({ date: odDate, reason: odReason, location: odLocation, odType, fromTime: odFromTime || undefined, toTime: odToTime || undefined })}
+                <Button size="sm" disabled={!odStartDate || !odEndDate || odEndDate < odStartDate || !odReason.trim() || createOdMutation.isPending}
+                  onClick={() => createOdMutation.mutate({ startDate: odStartDate, endDate: odEndDate, reason: odReason, location: odLocation, odType, fromTime: odFromTime || undefined, toTime: odToTime || undefined })}
                   data-testid="button-submit-od"
                 >Submit Request</Button>
                 <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>Cancel</Button>

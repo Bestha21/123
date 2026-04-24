@@ -2548,22 +2548,55 @@ export async function registerRoutes(
       const currentEmployee = await storage.getEmployeeByEmail(userEmail);
       if (!currentEmployee) return res.status(403).json({ message: "Employee not found" });
 
-      const { date, reason, location, odType, fromTime, toTime } = req.body;
-      if (!date || !reason) return res.status(400).json({ message: "Date and reason are required" });
+      const { date, startDate, endDate, reason, location, odType, fromTime, toTime } = req.body;
+      const start = startDate || date;
+      const end = endDate || startDate || date;
+      if (!start || !reason) return res.status(400).json({ message: "Date and reason are required" });
 
-      const created = await storage.createOnDutyRequest({
-        employeeId: currentEmployee.id,
-        date,
-        reason,
-        location: location || null,
-        odType: odType || 'full_day',
-        fromTime: fromTime || null,
-        toTime: toTime || null,
-        level1Status: 'pending',
-        level2Status: 'pending',
-        status: 'pending',
-      });
-      res.json(created);
+      const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+      if (!dateRe.test(start) || !dateRe.test(end)) {
+        return res.status(400).json({ message: "Dates must be in YYYY-MM-DD format" });
+      }
+      const startMs = Date.UTC(+start.slice(0, 4), +start.slice(5, 7) - 1, +start.slice(8, 10));
+      const endMs = Date.UTC(+end.slice(0, 4), +end.slice(5, 7) - 1, +end.slice(8, 10));
+      if (Number.isNaN(startMs) || Number.isNaN(endMs)) {
+        return res.status(400).json({ message: "Invalid date" });
+      }
+      if (endMs < startMs) return res.status(400).json({ message: "End date must be on or after start date" });
+
+      const isHalfDay = (odType || 'full_day') === 'half_day';
+      if (isHalfDay && endMs !== startMs) {
+        return res.status(400).json({ message: "Half-day OD must be a single day" });
+      }
+
+      const days: string[] = [];
+      for (let t = startMs; t <= endMs; t += 86400000) {
+        const d = new Date(t);
+        const y = d.getUTCFullYear();
+        const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+        const day = String(d.getUTCDate()).padStart(2, '0');
+        days.push(`${y}-${m}-${day}`);
+      }
+      if (days.length === 0) return res.status(400).json({ message: "No valid dates in range" });
+      if (days.length > 31) return res.status(400).json({ message: "Date range cannot exceed 31 days" });
+
+      const createdAll = [] as any[];
+      for (const d of days) {
+        const created = await storage.createOnDutyRequest({
+          employeeId: currentEmployee.id,
+          date: d,
+          reason,
+          location: location || null,
+          odType: odType || 'full_day',
+          fromTime: fromTime || null,
+          toTime: toTime || null,
+          level1Status: 'pending',
+          level2Status: 'pending',
+          status: 'pending',
+        });
+        createdAll.push(created);
+      }
+      res.json(createdAll.length === 1 ? createdAll[0] : createdAll);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

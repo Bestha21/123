@@ -33,13 +33,24 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback } from "react";
 import { ESSPayslipView } from "@/components/ESSPayslipView";
 import { useEssLayout, getEssLayoutOptions } from "@/lib/themeContext";
-//import EmployeeSelfServiceBento from "./EmployeeSelfServiceBento";//hide bento 1
+import EmployeeSelfServiceBento from "./EmployeeSelfServiceBento";
 import { LayoutGrid, List } from "lucide-react";
+
+const prettify = (value: any): string => {
+  if (value === null || value === undefined) return '';
+  const s = String(value).trim();
+  if (!s) return '';
+  return s
+    .replace(/[_-]+/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map(w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(' ');
+};
 
 function EmployeeSelfServiceClassic() {
   const [essLayout, setEssLayout] = useEssLayout();
   const layoutOptions = getEssLayoutOptions();
-  //if (essLayout === "bento") return <EmployeeSelfServiceBento />;hide bento 5
 
   const { user } = useAuth();
   const { toast } = useToast();
@@ -933,30 +944,29 @@ function EmployeeSelfServiceClassic() {
   return (
     <div className="space-y-4 sm:space-y-6 max-w-full overflow-hidden pb-16 sm:pb-0">
       <div className="flex items-start justify-between flex-wrap gap-3 sm:gap-4">
-  <div>
-    <h1 className="text-xl sm:text-2xl font-bold text-foreground">Employee Self Service</h1>
-    <p className="text-xs sm:text-sm text-muted-foreground">Manage your HR activities and complete onboarding</p>
-    <p className="text-muted-foreground mt-1 text-sm">Welcome, {user?.firstName || 'Employee'}</p>
-	
-		{/*{layoutOptions.length > 1 && (
-      <div className="mt-2 inline-flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
-        <button
-          onClick={() => setEssLayout("classic")}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${essLayout === "classic" ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
-          data-testid="button-layout-classic"
-        >
-          <List className="w-3.5 h-3.5" /> Classic
-        </button>
-		 <button
-          onClick={() => setEssLayout("bento")}
-          className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${essLayout === "bento" ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
-          data-testid="button-layout-bento"
-        >
-          <LayoutGrid className="w-3.5 h-3.5" /> Bento
-        </button>}
-      </div>
-)}*/}
-  </div>
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">Employee Self Service</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground">Manage your HR activities and complete onboarding</p>
+          <p className="text-muted-foreground mt-1 text-sm">Welcome, {user?.firstName || 'Employee'}</p>
+          {layoutOptions.length > 1 && (
+            <div className="mt-2 inline-flex items-center gap-1 bg-white border border-slate-200 rounded-xl p-1 shadow-sm">
+              <button
+                onClick={() => setEssLayout("classic")}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${essLayout === "classic" ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
+                data-testid="button-layout-classic"
+              >
+                <List className="w-3.5 h-3.5" /> Classic
+              </button>
+              <button
+                onClick={() => setEssLayout("bento")}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${essLayout === "bento" ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
+                data-testid="button-layout-bento"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" /> Bento
+              </button>
+            </div>
+          )}
+        </div>
         {currentEmployee && !currentEmployee.attendanceExempt && (
           <div className="hidden sm:flex gap-3 items-center">
             {(!todayLog || todayLog.checkOut) && (
@@ -1074,7 +1084,7 @@ function EmployeeSelfServiceClassic() {
                     <span className="text-xs sm:text-sm text-primary-foreground/70">Onboarding: {onboardingProgress}% Complete</span>
                   </>
                 ) : (
-                  <Badge className="bg-white/20 text-primary-foreground">{currentEmployee?.status || 'Employee'}</Badge>
+                  <Badge className="bg-white/20 text-primary-foreground">{prettify(currentEmployee?.status) || 'Employee'}</Badge>
                 )}
               </div>
             </div>
@@ -1320,7 +1330,7 @@ function EmployeeSelfServiceClassic() {
                             <div key={idx} className={`flex items-center justify-between p-2 rounded-lg ${isPast ? 'bg-muted/30 opacity-60' : 'bg-muted/50'}`}>
                               <div>
                                 <p className="text-sm font-medium text-foreground">{holiday.name}</p>
-                                <p className="text-xs text-muted-foreground">{holiday.type || 'National'}</p>
+                                <p className="text-xs text-muted-foreground">{prettify(holiday.type) || 'National'}</p>
                               </div>
                               <div className="flex items-center gap-2">
                                 <Badge variant="outline">{format(new Date(holiday.date), "MMM dd")}</Badge>
@@ -1705,7 +1715,7 @@ function EmployeeSelfServiceClassic() {
                     </div>
                     <div className="flex items-center gap-2">
                       {form.required && <Badge variant="destructive">Required</Badge>}
-                      <Badge className={getStatusColor(form.status)}>{form.status}</Badge>
+                      <Badge className={getStatusColor(form.status)}>{prettify(form.status)}</Badge>
                     </div>
                   </div>
                 </CardHeader>
@@ -1805,7 +1815,7 @@ function EmployeeSelfServiceClassic() {
                           </div>
                         </div>
                         <div className="flex items-center gap-3">
-                          <Badge className={getStatusColor(record.status || "pending")}>{record.status}</Badge>
+                          <Badge className={getStatusColor(record.status || "pending")}>{prettify(record.status || "pending")}</Badge>
                           <Button size="icon" variant="ghost" onClick={() => setViewPayslip(record)} data-testid={`button-view-payslip-${record.id}`}>
                             <FileText className="w-4 h-4" />
                           </Button>
@@ -3131,7 +3141,7 @@ function EmployeeSelfServiceClassic() {
                         </div>
                         <div className="flex-1">
                           <p className="font-semibold text-foreground">{asset.name}</p>
-                          <p className="text-sm text-muted-foreground">{asset.category}</p>
+                          <p className="text-sm text-muted-foreground">{prettify(asset.category)}</p>
                           {asset.brand && <p className="text-xs text-muted-foreground">{asset.brand} {asset.model || ''}</p>}
                           <div className="mt-2 space-y-1">
                             <p className="text-xs text-muted-foreground">Asset Code: <span className="font-medium text-foreground">{asset.assetCode}</span></p>
@@ -3610,7 +3620,7 @@ function EmployeeSelfServiceClassic() {
                               loan.status === "foreclosed" ? "bg-purple-100 text-purple-800" :
                               "bg-gray-100 text-gray-800"
                             } data-testid={`badge-loan-status-${loan.id}`}>
-                              {(loan.status || "pending").charAt(0).toUpperCase() + (loan.status || "pending").slice(1)}
+                              {prettify(loan.status || "pending")}
                             </Badge>
                           </div>
                           {loan.status === "pending" && (
@@ -3803,7 +3813,7 @@ function EmployeeSelfServiceClassic() {
                             <Receipt className="w-5 h-5 text-primary" />
                           </div>
                           <div>
-                            <p className="font-medium text-foreground capitalize">{expense.category?.replace(/_/g, " ") || "General"}</p>
+                            <p className="font-medium text-foreground">{prettify(expense.category) || "General"}</p>
                             <p className="text-sm text-muted-foreground">{expense.expenseDate ? format(new Date(expense.expenseDate), "dd MMM yyyy") : "N/A"}</p>
                             {expense.description && <p className="text-xs text-muted-foreground mt-1">{expense.description}</p>}
                           </div>
@@ -3997,7 +4007,7 @@ function EmployeeSelfServiceClassic() {
                               {policy.description && <p className="text-sm text-muted-foreground line-clamp-1">{policy.description}</p>}
                             </div>
                             <div className="flex items-center gap-2 mt-1">
-                              <Badge className={`text-[10px] ${categoryColors[policy.category] || categoryColors.general}`}>{policy.category}</Badge>
+                              <Badge className={`text-[10px] ${categoryColors[policy.category] || categoryColors.general}`}>{prettify(policy.category)}</Badge>
                               {policy.version && <span className="text-[10px] text-muted-foreground">v{policy.version}</span>}
                               {policy.fileSize && <span className="text-[10px] text-muted-foreground">{formatSize(policy.fileSize)}</span>}
                               {policy.updatedAt && <span className="text-[10px] text-muted-foreground">Updated: {format(new Date(policy.updatedAt), "MMM dd, yyyy")}</span>}
@@ -4164,7 +4174,7 @@ function EmployeeSelfServiceClassic() {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Gender</label>
-                        <p className="text-sm font-medium">{currentEmployee.gender || '-'}</p>
+                        <p className="text-sm font-medium">{prettify(currentEmployee.gender) || '-'}</p>
                       </div>
                     </div>
                   </div>
@@ -4190,7 +4200,7 @@ function EmployeeSelfServiceClassic() {
                               data-testid={`input-personal-${key}`}
                             />
                           ) : (
-                            <p className="text-sm font-medium">{(currentEmployee as any)[key] || '-'}</p>
+                            <p className="text-sm font-medium">{(['bloodGroup','maritalStatus'].includes(key) ? prettify((currentEmployee as any)[key]) : (currentEmployee as any)[key]) || '-'}</p>
                           )}
                         </div>
                       ))}
@@ -4261,7 +4271,7 @@ function EmployeeSelfServiceClassic() {
                               <span className="text-muted-foreground ml-2">{req.oldValue || '(empty)'} → {req.newValue}</span>
                             </div>
                             <Badge className={req.status === 'approved' ? 'bg-green-100 text-green-700' : req.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}>
-                              {req.status}
+                              {prettify(req.status)}
                             </Badge>
                           </div>
                         ))}
@@ -4643,9 +4653,10 @@ function EmployeeSelfServiceClassic() {
     </div>
   );
 }
+
+
 export default function EmployeeSelfService() {
   const [essLayout] = useEssLayout();
- // if (essLayout === "bento") return <EmployeeSelfServiceBento />;
+  if (essLayout === "bento") return <EmployeeSelfServiceBento />;
   return <EmployeeSelfServiceClassic />;
 }
-
