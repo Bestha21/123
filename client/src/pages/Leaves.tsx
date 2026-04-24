@@ -398,8 +398,8 @@ export default function Leaves() {
         const s = new Date(startDate);
         const e = new Date(endDate);
         const d = Math.ceil((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-        if (d >= 2 && !medicalCertificateUrl && !medicalCertificateFile) {
-          throw new Error("Medical certificate is required for 2+ sick leave days");
+        if (d > 1 && !medicalCertificateUrl && !medicalCertificateFile) {
+          throw new Error("Medical certificate is required for sick leave of more than 1 day");
         }
       }
 
@@ -775,10 +775,10 @@ export default function Leaves() {
                 <div className="space-y-3">
                   <div className="p-3 bg-amber-50 rounded-lg border border-amber-200 text-sm text-amber-800">
                     <AlertTriangle className="w-4 h-4 inline mr-1" />
-                    Medical certificate required for SL of 1+ day (MBBS/MD from registered hospital/clinic with proper sign and seal)
+                    Medical certificate required for SL of more than 1 day (MBBS/MD from registered hospital/clinic with proper sign and seal)
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Medical Certificate URL / Reference {!isHalfDay && startDate && endDate && (() => { const s = new Date(startDate); const e = new Date(endDate); const d = Math.ceil((e.getTime()-s.getTime())/(1000*60*60*24))+1; return d >= 2 ? <span className="text-red-500">*</span> : null; })()}</label>
+                    <label className="text-sm font-medium">Medical Certificate URL / Reference {!isHalfDay && startDate && endDate && (() => { const s = new Date(startDate); const e = new Date(endDate); const d = Math.ceil((e.getTime()-s.getTime())/(1000*60*60*24))+1; return d > 1 ? <span className="text-red-500">*</span> : null; })()}</label>
                     <div className="space-y-2">
                       <Input
                         type="text"
@@ -794,7 +794,7 @@ export default function Leaves() {
                         data-testid="input-medical-certificate-file"
                       />
                     </div>
-                        <p className="text-xs text-muted-foreground">Required for 1+ consecutive day of Sick Leave</p>
+                        <p className="text-xs text-muted-foreground">Required for sick leave of more than 1 day</p>
                   </div>
                 </div>
               )}

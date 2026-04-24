@@ -1125,7 +1125,7 @@ export async function registerRoutes(
       checkOutLatitude: latitude,
       checkOutLongitude: longitude,
       workHours: workHours,
-      overtime: parseFloat(workHours) > 9 ? (parseFloat(workHours) - 9).toFixed(2) : "0",
+      overtime: "0",
       status
     });
 
@@ -1141,33 +1141,7 @@ export async function registerRoutes(
       });
     } catch (e) { console.error("Attendance log error:", e); }
 
-    /*if (parseFloat(workHours) > 9) {
-      const overtimeHrs = (parseFloat(workHours) - 9).toFixed(2);
-      try {
-        await storage.createOvertimeRequest({
-          employeeId,
-          date: today,
-          overtimeHours: overtimeHrs,
-          reason: "Auto-detected: worked beyond standard shift hours",
-          status: "pending",
-        });
-      } catch (e) {}
-    }*/
-
     res.json(att);
-
-    // Fire-and-forget: notify employee if overtime detected
-   /* if (parseFloat(workHours) > 9) {
-      try {
-        const emp = await storage.getEmployee(employeeId);
-        if (emp?.email) {
-          const empName = `${emp.firstName} ${emp.lastName || ''}`.trim();
-          const otHrs = (parseFloat(workHours) - 9).toFixed(2);
-          const detail = `You worked <strong>${workHours} hours</strong> on ${today}, which includes <strong>${otHrs} hours</strong> of overtime. An overtime request has been auto-created for approval.`;
-          sendAttendanceAlertEmail(emp.email, empName, 'overtime', detail).catch(() => {});
-        }
-      } catch (e) { console.error("Overtime notification error:", e); }
-    }*/
   });
 
   app.get("/api/attendance/cycle-stats", async (req, res) => {
@@ -1917,9 +1891,13 @@ export async function registerRoutes(
     res.json(leaves);
   });
 
-  app.post(api.leave.create.path, async (req, res) => {
+  app.post(api.leave.create.path, upload.single("medicalCertificateFile"), async (req, res) => {
     try {
-      const input = api.leave.create.input.parse(req.body);
+      const body = req.body as any;
+      const input = api.leave.create.input.parse({
+        ...body,
+        employeeId: Number(body.employeeId),
+      });
       const startDate = new Date(input.startDate);
       const endDate = new Date(input.endDate);
 
@@ -1984,6 +1962,17 @@ export async function registerRoutes(
         }
       }
 
+      const clubbingRules: Record<string, { can: string[]; cannot: string[] }> = {
+        EL: { can: ["SL", "ML", "PL", "BL", "CO", "LOP"], cannot: ["CL"] },
+        CL: { can: ["CO", "LOP"], cannot: ["EL", "SL", "ML", "PL", "BL"] },
+        SL: { can: ["EL", "ML", "PL", "BL", "CO", "LOP"], cannot: ["CL"] },
+        ML: { can: ["EL", "SL", "BL", "CO", "LOP"], cannot: ["CL", "PL"] },
+        PL: { can: ["EL", "SL", "BL", "CO", "LOP"], cannot: ["ML", "CL"] },
+        BL: { can: ["EL", "SL", "ML", "PL", "CO", "LOP"], cannot: ["CL"] },
+        CO: { can: ["EL", "CL", "SL", "ML", "PL", "BL", "LOP"], cannot: [] },
+        LOP: { can: ["EL", "CL", "SL", "ML", "PL", "BL", "CO"], cannot: [] },
+      };
+
       // --- Probation & eligibility validation ---
       const leaveEmployee = await storage.getEmployee(input.employeeId);
       if (leaveEmployee) {
@@ -2024,9 +2013,9 @@ export async function registerRoutes(
           (input as any).requiresVpApproval = true;
         }
 
-        if (input.leaveType === 'sick' && days >= 2 && !input.medicalCertificateUrl) {
+      if (input.leaveType === 'sick' && days > 1 && !input.medicalCertificateUrl && !req.file) {
           return res.status(400).json({
-            message: `Medical certificate is mandatory for Sick Leave (SL) of 2 or more consecutive days. Please upload a medical certificate to proceed.`
+          message: `Medical certificate is mandatory for Sick Leave (SL) of more than 1 day. Please upload a medical certificate to proceed.`
           });
         }
 
@@ -2041,13 +2030,53 @@ export async function registerRoutes(
         }
       }
 
-      const leaveTypeMap: Record<string, string> = {
-        earned: "EL", casual: "CL", sick: "SL",
-        bereavement: "BL", paternity: "PL", comp_off: "CO", lop: "LOP"
-      };
-      const code = leaveTypeMap[input.leaveType] || input.leaveType.toUpperCase();
       const allTypes = await storage.getLeaveTypes();
-      const matchedType = allTypes.find(t => t.code === code);
+      const leaveTypeLookup = String(input.leaveType || "").toLowerCase();
+      const matchedType = allTypes.find(t => {
+        const code = String(t.code || "").toLowerCase();
+        const name = String(t.name || "").toLowerCase();
+        return code === leaveTypeLookup || name.includes(leaveTypeLookup) || leaveTypeLookup.includes(code);
+      });
+
+      // --- Clubbing rules enforcement (DB-driven, crash-safe) ---
+      const codeFor = (lt: string | null | undefined): string | null => {
+        const q = String(lt || "").toLowerCase();
+        if (!q) return null;
+        const found = allTypes.find(t => {
+          const code = String(t.code || "").toLowerCase();
+          const name = String(t.name || "").toLowerCase();
+          return code === q || name.includes(q) || q.includes(code);
+        });
+        return found ? String(found.code || "").toUpperCase() : null;
+      };
+      const newCode = codeFor(input.leaveType);
+      const newRules = newCode ? clubbingRules[newCode] : undefined;
+      if (newCode && newRules) {
+        const oneDayMs = 24 * 60 * 60 * 1000;
+        const dayDiff = (a: Date, b: Date) => Math.round((a.getTime() - b.getTime()) / oneDayMs);
+        for (const existing of activeLeaves) {
+          const exCode = codeFor(existing.leaveType);
+          if (!exCode || exCode === newCode) continue;
+          // Only enforce clubbing when the new leave is continuous with an existing
+          // leave (adjacent calendar days or overlapping). Non-adjacent leaves are
+          // independent and clubbing rules do not apply.
+          const exStart = new Date(existing.startDate);
+          const exEnd = new Date(existing.endDate);
+          const isOverlapping = startDate <= exEnd && endDate >= exStart;
+          const isAdjacent = dayDiff(startDate, exEnd) === 1 || dayDiff(exStart, endDate) === 1;
+          if (!isOverlapping && !isAdjacent) continue;
+          if (newRules.cannot.includes(exCode)) {
+            return res.status(400).json({
+              message: `Can't apply ${newCode} continuously with ${exCode} (${existing.startDate} to ${existing.endDate}) because these leave types cannot be clubbed.`,
+            });
+          }
+          if (newRules.can.length > 0 && !newRules.can.includes(exCode)) {
+            return res.status(400).json({
+              message: `Can't apply ${newCode} continuously with ${exCode} (${existing.startDate} to ${existing.endDate}) because these leave types cannot be clubbed.`,
+            });
+          }
+        }
+      }
 
       // --- Balance check: ensure requested days don't exceed available balance ---
       // Skip for LOP (loss of pay has no balance) and Comp Off (handled separately).
@@ -3639,7 +3668,7 @@ export async function registerRoutes(
     res.status(201).json(task);
   });
 
-   app.patch("/api/clearance-tasks/:id", async (req, res) => {
+  app.patch("/api/clearance-tasks/:id", async (req, res) => {
     const { status, remarks } = req.body;
     const updates: any = { status };
     if (remarks !== undefined) updates.remarks = remarks;
