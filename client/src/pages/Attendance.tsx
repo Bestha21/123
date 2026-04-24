@@ -401,7 +401,6 @@ export default function AttendancePage() {
           {hasReportees && <TabsTrigger value="sheet" data-testid="tab-sheet">Att. Sheet</TabsTrigger>}
           <TabsTrigger value="regularize" data-testid="tab-regularize">Regularization</TabsTrigger>
           <TabsTrigger value="onduty" data-testid="tab-onduty">On Duty</TabsTrigger>
-        // <TabsTrigger value="calendar" data-testid="tab-calendar">Calendar</TabsTrigger>
           {isAdminUser && <TabsTrigger value="policy" data-testid="tab-policy">Policy</TabsTrigger>}
         </TabsList>
 
