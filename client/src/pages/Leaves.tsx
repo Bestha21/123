@@ -632,14 +632,14 @@ export default function Leaves() {
         </div>
       );
     }
-    if (viewMode === "specific" && !selectedMemberId) {
+    /*if (viewMode === "specific" && !selectedMemberId) {
       return (
         <div className="p-4 bg-slate-50 dark:bg-slate-900 rounded-lg border text-sm text-slate-500 flex items-center gap-2">
           <Search className="w-4 h-4 shrink-0" />
           <span>Search and select a member above to view their leave balances.</span>
         </div>
       );
-    }
+    }*/
     const bMap = viewMode === "self" ? selfBalanceMap : viewBalanceMap;
     const showProbationInfo = viewMode === "self" && isProbation;
     return (
