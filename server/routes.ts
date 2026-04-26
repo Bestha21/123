@@ -688,8 +688,15 @@ export async function registerRoutes(
   app.get(api.documents.list.path, async (req, res) => {
     const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const docs = await storage.getDocuments(employeeId);
-    res.json(docs);
-  });
+    // Strip heavy Base64 file content from list payloads — only metadata is needed
+    // for the Document Management UI. The actual file is fetched on-demand via
+    // GET /api/documents/:id/file when the user clicks Download / View.
+    const docsLite = docs.map((d: any) => {
+      const { fileData, ...rest } = d;
+      return rest;
+    });
+    res.json(docsLite);
+  });;
 
   app.post(api.documents.create.path, async (req, res) => {
     const input = api.documents.create.input.parse(req.body);
