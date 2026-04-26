@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef, createContext, useContext } from "react";
 import { Link, useLocation } from "wouter";
 import { ThemeSwitcher } from "@/components/ThemeSwitcher";
+import { preloadPage } from "@/lib/pagePreload";
 import { 
   LayoutDashboard, Users, UserPlus, ClipboardCheck, CalendarRange, DollarSign, 
   LogOut, Receipt, Laptop, UserX, Bell, Building2, CalendarDays, FileText, 
@@ -164,10 +165,13 @@ export function Sidebar() {
         const Icon = link.icon;
         const isActive = location === link.href;
         return (
-          <Link 
+           <Link 
             key={link.href} 
             href={link.href} 
             data-testid={`link-${link.label.toLowerCase().replace(/\s+/g, '-')}`}
+            onMouseEnter={() => preloadPage(link.href)}
+            onFocus={() => preloadPage(link.href)}
+            onTouchStart={() => preloadPage(link.href)}
             className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
               isActive 
                 ? 'bg-[hsl(var(--sidebar-active-bg))] text-[hsl(var(--sidebar-active-fg))]' 
