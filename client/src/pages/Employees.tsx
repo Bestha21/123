@@ -776,7 +776,7 @@ export default function Employees() {
                       {employee.employmentType}
                     </Badge>
                   )}
-                  {employee.bgvStatus && (
+                 /* {employee.bgvStatus && (
                     <Badge 
                       variant="outline"
                       className={`text-xs ${
@@ -791,7 +791,7 @@ export default function Employees() {
                     >
                       BGV: {employee.bgvStatus === 'in_progress' ? 'Pending' : employee.bgvStatus}
                     </Badge>
-                  )}
+                  )}*/
                 </div>
               </CardContent>
             </Card>
