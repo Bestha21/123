@@ -67,13 +67,49 @@ export default function Departments() {
     },
   });
 
-  const getEmployeeCount = (deptId: number) => {
+    const getEmployeeCount = (deptId: number) => {
     return employees?.filter(e => e.departmentId === deptId).length || 0;
   };
 
-  const getDeptEmployees = (deptId: number) => {
-    return employees?.filter(e => e.departmentId === deptId) || [];
+  // Designation seniority ranking — lower number = more senior.
+  const designationRank = (designation?: string | null): number => {
+    const d = (designation || "").toLowerCase();
+    if (!d) return 99;
+    if (/(md\s*&|managing director|ceo|chief executive|chief operating|chief financial|chairman|founder|president(?!.*vice))/.test(d)) return 1;
+    if (/(vice president|^vp\b|\bvp\b|avp|director|^head\b|head[-\s]|chief|senior management)/.test(d)) return 2;
+    if (/(deputy general manager|dgm|general manager|\bgm\b|agm)/.test(d)) return 3;
+    if (/(senior manager|sr\.?\s*manager|sr manager)/.test(d)) return 4;
+    if (/(assistant manager|asst\.?\s*manager|deputy manager)/.test(d)) return 6;
+    if (/manager/.test(d)) return 5;
+    if (/(tech lead|team lead|\blead\b)/.test(d)) return 7;
+    if (/(senior|sr\.?\s)/.test(d)) return 8;
+    if (/(engineer|analyst|developer|coordinator|administrator|architect|specialist)/.test(d)) return 9;
+    if (/(executive|associate|officer|recruiter)/.test(d)) return 10;
+    if (/(trainee|intern|apprentice)/.test(d)) return 11;
+    return 12;
   };
+
+  const sortByDesignation = (list: Employee[]) => {
+    return [...list].sort((a, b) => {
+      const ra = designationRank(a.designation);
+      const rb = designationRank(b.designation);
+      if (ra !== rb) return ra - rb;
+      const da = (a.designation || "").localeCompare(b.designation || "");
+      if (da !== 0) return da;
+      const na = `${a.firstName || ''} ${a.lastName || ''}`.trim();
+      const nb = `${b.firstName || ''} ${b.lastName || ''}`.trim();
+      return na.localeCompare(nb);
+    });
+  };
+
+  const getDeptEmployees = (deptId: number) => {
+    const list = employees?.filter(e => e.departmentId === deptId) || [];
+    return sortByDesignation(list);
+  };
+
+  const leadershipEmployees = sortByDesignation(
+    (employees || []).filter(e => designationRank(e.designation) <= 2)
+  );
 
   const colors = [
     "from-blue-500 to-blue-600",
@@ -169,7 +205,47 @@ export default function Departments() {
           </CardContent>
         </Card>
       </div>
-
+		      {leadershipEmployees.length > 0 && (
+        <Card data-testid="department-card-leadership" className="overflow-hidden">
+          <div className="h-2 bg-gradient-to-r from-amber-500 to-orange-600" />
+          <CardHeader className="pb-3">
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle className="text-lg">Leadership</CardTitle>
+                <p className="text-sm text-slate-500 mt-1">
+                  Senior management & decision makers
+                </p>
+              </div>
+              <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-white">
+                <Users className="w-5 h-5" />
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-slate-600">
+                <Users className="w-4 h-4" />
+                <span className="text-sm font-medium">{leadershipEmployees.length} members</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+              {leadershipEmployees.map((emp) => (
+                <div key={emp.id} className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg">
+                  <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center text-xs font-bold text-amber-700">
+                    {emp.firstName?.[0]}{(emp.lastName || emp.firstName)?.[0]}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900 truncate">
+                      {emp.firstName} {emp.lastName || ''}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">{emp.designation}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {departments?.map((dept, index) => {
           const deptEmployees = getDeptEmployees(dept.id);
