@@ -3679,12 +3679,43 @@ export async function registerRoutes(
     } catch (e) { console.error("Exit notification error:", e); }
   });
 
-  app.patch(api.exit.updateStatus.path, async (req, res) => {
+    app.patch(api.exit.updateStatus.path, async (req, res) => {
     const updates = api.exit.updateStatus.input.parse(req.body);
-    const record = await storage.updateExitRecord(Number(req.params.id), updates);
+    const recordId = Number(req.params.id);
+    const previous = await storage.getExitRecords()
+      .then(rs => rs.find(r => r.id === recordId) || null)
+      .catch(() => null);
+    const record = await storage.updateExitRecord(recordId, updates);
 
     if (updates.clearanceStatus === "completed") {
       await storage.updateEmployee(record.employeeId, { status: "inactive" });
+    }
+
+    // Notify the employee when HR/manager moves their exit out of "pending"
+    // (approval = in_progress / completed, rejection = rejected).
+    try {
+      const newStatus = updates.clearanceStatus;
+      const wasPending = !previous || (previous.clearanceStatus || "pending") === "pending";
+      const isActionable = newStatus && ["in_progress", "completed", "rejected"].includes(newStatus);
+      if (wasPending && isActionable) {
+        const emp = await storage.getEmployee(record.employeeId);
+        if (emp?.email) {
+          const empName = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee';
+          const isApproved = newStatus !== "rejected";
+          const subject = isApproved
+            ? "Your Exit Request Has Been Approved"
+            : "Your Exit Request Has Been Rejected";
+          const lwd = record.lastWorkingDate
+            ? new Date(record.lastWorkingDate as any).toDateString()
+            : 'To be confirmed';
+          const body = isApproved
+            ? `Hi ${empName},\n\nYour exit / resignation request has been acknowledged and approved by HR.\n\nLast Working Day: ${lwd}\n\nThe clearance process has now started. You will receive further updates as your clearance tasks, exit interview, and full & final settlement progress.\n\nIf you have any questions, please reach out to HR.\n\nThank you,\nHR Team`
+            : `Hi ${empName},\n\nYour exit / resignation request has been reviewed and could not be approved at this time.\n\nPlease get in touch with HR or your reporting manager to understand the next steps.\n\nThank you,\nHR Team`;
+          sendNotificationEmail(emp.email, subject, body).catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.error("Exit approval notification error:", e);
     }
 
     res.json(record);
