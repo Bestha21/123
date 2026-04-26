@@ -72,10 +72,15 @@ export default function Departments() {
   };
 
   // Designation seniority ranking — lower number = more senior.
-  const designationRank = (designation?: string | null): number => {
+    const designationRank = (designation?: string | null): number => {
     const d = (designation || "").toLowerCase();
     if (!d) return 99;
-    if (/(md\s*&|managing director|ceo|chief executive|chief operating|chief financial|chairman|founder|president(?!.*vice))/.test(d)) return 1;
+    // Demote "Assistant to the …" / "EA" / "Secretary to" first so they
+    // never get mistaken for the senior role they support.
+    if (/(assistant to|asst\.?\s*to|secretary to|^ea\b|^ea\/|executive assistant)/.test(d)) return 10;
+    // Tier 1: MD / CEO / Chairman / Founder — the very top
+    if (/(md\s*&|\bmd\b|managing director|\bceo\b|chief executive|chief operating|chief financial|chairman|founder|president(?!.*vice))/.test(d)) return 1;
+    // Tier 2: VP / Director / Head / AVP / Senior Management / other Chiefs
     if (/(vice president|^vp\b|\bvp\b|avp|director|^head\b|head[-\s]|chief|senior management)/.test(d)) return 2;
     if (/(deputy general manager|dgm|general manager|\bgm\b|agm)/.test(d)) return 3;
     if (/(senior manager|sr\.?\s*manager|sr manager)/.test(d)) return 4;
@@ -88,12 +93,31 @@ export default function Departments() {
     if (/(trainee|intern|apprentice)/.test(d)) return 11;
     return 12;
   };
+    const topExecOrder = (designation?: string | null): number => {
+    const d = (designation || "").toLowerCase();
+    if (/md\s*&\s*ceo/.test(d)) return 0;
+    if (/managing director.*ceo|ceo.*managing director/.test(d)) return 0;
+    if (/\bceo\b|chief executive/.test(d)) return 1;
+    if (/managing director|\bmd\b/.test(d)) return 2;
+    if (/chairman/.test(d)) return 3;
+    if (/founder/.test(d)) return 4;
+    if (/president/.test(d)) return 5;
+    if (/chief operating|\bcoo\b/.test(d)) return 6;
+    if (/chief financial|\bcfo\b/.test(d)) return 7;
+    return 99;
+  };
 
-  const sortByDesignation = (list: Employee[]) => {
+    const sortByDesignation = (list: Employee[]) => {
     return [...list].sort((a, b) => {
       const ra = designationRank(a.designation);
       const rb = designationRank(b.designation);
       if (ra !== rb) return ra - rb;
+      // Tier 1 (top execs): MD & CEO first, then CEO, MD, Chairman, …
+      if (ra === 1) {
+        const oa = topExecOrder(a.designation);
+        const ob = topExecOrder(b.designation);
+        if (oa !== ob) return oa - ob;
+      }
       const da = (a.designation || "").localeCompare(b.designation || "");
       if (da !== 0) return da;
       const na = `${a.firstName || ''} ${a.lastName || ''}`.trim();
