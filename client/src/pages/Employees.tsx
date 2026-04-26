@@ -776,22 +776,7 @@ export default function Employees() {
                       {employee.employmentType}
                     </Badge>
                   )}
-                 /* {employee.bgvStatus && (
-                    <Badge 
-                      variant="outline"
-                      className={`text-xs ${
-                        employee.bgvStatus === 'successful' 
-                          ? 'border-green-200 bg-green-50 text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-400'
-                          : employee.bgvStatus === 'in_progress'
-                          ? 'border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-400'
-                          : employee.bgvStatus === 'fail'
-                          ? 'border-red-200 bg-red-50 text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-400'
-                          : ''
-                      }`}
-                    >
-                      BGV: {employee.bgvStatus === 'in_progress' ? 'Pending' : employee.bgvStatus}
-                    </Badge>
-                  )}*/
+                 
                 </div>
               </CardContent>
             </Card>
