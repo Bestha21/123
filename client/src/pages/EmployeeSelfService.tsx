@@ -33,7 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback } from "react";
 import { ESSPayslipView } from "@/components/ESSPayslipView";
 import { useEssLayout, getEssLayoutOptions } from "@/lib/themeContext";
-import EmployeeSelfServiceBento from "./EmployeeSelfServiceBento";
+//import EmployeeSelfServiceBento from "./EmployeeSelfServiceBento";
 import { LayoutGrid, List } from "lucide-react";
 
 const prettify = (value: any): string => {
@@ -957,13 +957,13 @@ function EmployeeSelfServiceClassic() {
               >
                 <List className="w-3.5 h-3.5" /> Classic
               </button>
-              <button
+              /*<button
                 onClick={() => setEssLayout("bento")}
                 className={`flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-semibold ${essLayout === "bento" ? "bg-emerald-50 text-emerald-700" : "text-slate-600 hover:bg-slate-50"}`}
                 data-testid="button-layout-bento"
               >
                 <LayoutGrid className="w-3.5 h-3.5" /> Bento
-              </button>
+              </button>*/
             </div>
           )}
         </div>
