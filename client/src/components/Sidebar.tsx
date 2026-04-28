@@ -5,7 +5,7 @@ import { preloadPage } from "@/lib/pagePreload";
 import { 
   LayoutDashboard, Users, UserPlus, ClipboardCheck, CalendarRange, DollarSign, 
   LogOut, Receipt, Laptop, UserX, Bell, Building2, CalendarDays, FileText, 
-  Network, GitBranch, Contact, BarChart3, UserCircle, FileSpreadsheet, Plug, 
+  Network, GitBranch, Contact, BarChart3, UserCheck,UserCircle, FileSpreadsheet, Plug, 
   Target, GraduationCap, Heart, Plane, FolderKanban, Package, Briefcase, 
   FileCheck, Banknote, Scale, BookOpen, Clock, Layers, ChevronDown, Menu, X
 } from "lucide-react";
@@ -137,6 +137,7 @@ export function Sidebar() {
     ...(hasHrAccess ? [{ href: "/assets", label: "Assets", icon: Laptop }] : []),
     ...(hasHrAccess || isOnboardingTeam ? [{ href: "/onboarding", label: "Onboarding", icon: UserPlus }] : []),
     ...(hasHrAccess ? [{ href: "/exit", label: "Exit Management", icon: UserX }] : []),
+	...(hasHrAccess ? [{ href: "/profile-change-requests", label: "Profile Change Requests", icon: UserCheck }] : []),
     ...(hasHrAccess ? [{ href: "/announcements", label: "Announcements", icon: Bell }] : []),
     ...(hasHrAccess ? [{ href: "/company-policies", label: "Company Policies", icon: BookOpen }] : []),
     ...(isAdmin ? [{ href: "/entity-management", label: "Entity Management", icon: Layers }] : []),

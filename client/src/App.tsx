@@ -58,6 +58,7 @@ const AdvanceLoans = lazy(() => import("@/pages/AdvanceLoans"));
 const StatutoryCompliance = lazy(() => import("@/pages/StatutoryCompliance"));
 const EntityManagement = lazy(() => import("@/pages/EntityManagement"));
 const SalaryAdjustments = lazy(() => import("@/pages/SalaryAdjustments"));
+const ProfileChangeRequests = lazy(() => import("@/pages/ProfileChangeRequests"));
 
 function PageLoader() {
   return (
@@ -320,6 +321,9 @@ function Router() {
       </Route>
       <Route path="/entity-management">
         <ProtectedRoute component={EntityManagement} />
+      </Route>
+	   <Route path="/profile-change-requests">
+        <RoleProtectedRoute component={ProfileChangeRequests} allowedRoles={["admin", "hr", "hr_manager"]} />
       </Route>
       {/* <Route path="/performance">
         <ProtectedRoute component={Performance} />
