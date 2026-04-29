@@ -1499,7 +1499,7 @@ export default function PayrollPage() {
         '', '', '', '', '', '', '', '',   // O-V (8 empty)
         txnDate,                          // W
         '',                               // X
-        ifscCode,                         // Y
+        isHDFC ? '' : ifscCode,           // Y - blank for HDFC accounts (intra-bank)                         // Y
         '', '',                           // Z-AA (2 empty)
         'ashish@fctecnrgy.com'            // AB - fixed email
       ];
