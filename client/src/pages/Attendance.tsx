@@ -561,7 +561,10 @@ export default function AttendancePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {detailedLogs?.map((log: any) => (
+                      {[...(detailedLogs || [])]
+    .sort((a, b) => 
+      new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    ).map((log: any) => (
                         <tr key={log.id} className="border-b last:border-0" data-testid={`row-attendance-log-${log.id}`}>
                           <td className="py-3 font-medium text-slate-900">{log.employeeName}</td>
                           <td className="py-3 text-slate-600">{log.employeeCode}</td>
