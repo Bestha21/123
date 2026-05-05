@@ -7207,7 +7207,6 @@ Authorised Signatory
             const employee = allEmployees.find((e: any) =>
               e.biometricDeviceId === empCodeStr ||
               e.employeeCode?.toLowerCase() === empCodeStr.toLowerCase() ||
-              String(e.id) === empCodeStr ||
               (e.employeeCode && e.employeeCode.split('/').pop() === empCodeStr)
             );
 
@@ -7391,7 +7390,6 @@ Authorised Signatory
       const employee = allEmployees.find((e: any) =>
         e.biometricDeviceId === empCodeStr ||
         e.employeeCode?.toLowerCase() === empCodeStr.toLowerCase() ||
-        String(e.id) === empCodeStr ||
         (e.employeeCode && e.employeeCode.split('/').pop() === empCodeStr)
       );
 
@@ -7596,7 +7594,6 @@ Authorised Signatory
       const employee = allEmployees.find((e: any) =>
         e.biometricDeviceId === empCodeStr ||
         e.employeeCode?.toLowerCase() === empCodeStr.toLowerCase() ||
-        String(e.id) === empCodeStr ||
         (e.employeeCode && e.employeeCode.split('/').pop() === empCodeStr)
       );
 
