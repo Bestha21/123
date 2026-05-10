@@ -33,7 +33,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect, useCallback } from "react";
 import { ESSPayslipView } from "@/components/ESSPayslipView";
 import { useEssLayout, getEssLayoutOptions } from "@/lib/themeContext";
-//import EmployeeSelfServiceBento from "./EmployeeSelfServiceBento";
+import EmployeeSelfServiceBento from "./EmployeeSelfServiceBento";
 import { LayoutGrid, List } from "lucide-react";
 
 const prettify = (value: any): string => {
