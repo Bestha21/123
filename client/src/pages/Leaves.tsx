@@ -205,9 +205,19 @@ export default function Leaves() {
     return null;
   }, [viewMode, selectedMemberId, currentEmployee, employees]);
 
-  const { data: viewTargetBalances } = useQuery<LeaveBalance[]>({
+    const { data: viewTargetBalances } = useQuery<LeaveBalance[]>({
     queryKey: [`/api/leave-balances?employeeId=${viewTargetEmployee?.id}`],
     enabled: !!viewTargetEmployee?.id && viewMode !== "self",
+  });
+
+  const { data: specificMemberLeaves } = useQuery<LeaveRequest[]>({
+    queryKey: ["/api/leaves", "employee", selectedMemberId],
+    queryFn: async () => {
+      const res = await fetch(`/api/leaves?employeeId=${selectedMemberId}`, { credentials: "include" });
+      if (!res.ok) throw new Error("Failed to fetch leaves");
+      return res.json();
+    },
+    enabled: viewMode === "specific" && !!selectedMemberId,
   });
 
   const activeBalances = viewMode === "self" ? leaveBalances : viewTargetBalances;
@@ -267,10 +277,12 @@ export default function Leaves() {
     return map;
   };
 
-  const getViewLeaves = () => {
+   const getViewLeaves = () => {
+    if (viewMode === "specific" && selectedMemberId) {
+      return specificMemberLeaves || [];
+    }
     if (!leaves) return [];
     if (viewMode === "self") return leaves.filter(l => l.employeeId === currentEmployee?.id);
-    if (viewMode === "specific" && selectedMemberId) return leaves.filter(l => l.employeeId === selectedMemberId);
     if (viewMode === "all") {
       if (isAdmin) return leaves;
       return leaves.filter(l => {
