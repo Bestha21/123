@@ -2745,7 +2745,12 @@ export async function registerRoutes(
       // Send notification email to HR admins
       try {
         const allEmployees = await storage.getEmployees();
-        const hrAdmins = allEmployees.filter(e => e.accessRole === 'admin' && e.email && e.status === 'active');
+        const hrAdmins = allEmployees.filter(e => 
+    e.accessRole && 
+    e.accessRole.toLowerCase().split(',').map(r => r.trim()).includes('admin') && 
+    e.email && 
+    e.status === 'active'
+  );
         const empName = `${employee.firstName} ${employee.lastName || ''}`.trim();
         const fieldList = changes.map((c: any) => `<li><strong>${c.fieldName}</strong>: ${c.oldValue || '(empty)'} → ${c.newValue}</li>`).join('');
         for (const admin of hrAdmins) {
