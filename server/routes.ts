@@ -2745,20 +2745,33 @@ export async function registerRoutes(
       // Send notification email to HR admins
       try {
         const allEmployees = await storage.getEmployees();
-        const hrAdmins = allEmployees.filter(e => 
-    e.accessRole && 
-    e.accessRole.toLowerCase().split(',').map(r => r.trim()).includes('admin') && 
-    e.email && 
-    e.status === 'active'
-  );
+        const hrAdmins = allEmployees.filter(e => {
+  if (!e.accessRole || !e.email || e.status !== 'active') return false;
+  
+  // Split roles by comma and clean up whitespace
+  const roles = e.accessRole.toLowerCase().split(',').map(r => r.trim());
+  
+  // Return true if the user has either 'admin' or 'hr_manager' role
+  return roles.includes('admin') || roles.includes('hr_manager');
+});
         const empName = `${employee.firstName} ${employee.lastName || ''}`.trim();
         const fieldList = changes.map((c: any) => `<li><strong>${c.fieldName}</strong>: ${c.oldValue || '(empty)'} → ${c.newValue}</li>`).join('');
+		// Define the direct approval URL
+		const approvalUrl = "https://hrms.kadenc.com/profile-change-requests";
         for (const admin of hrAdmins) {
           sendNotificationEmail(
             admin.email!,
             `Profile Update Request from ${empName}`,
             'Profile Change Request',
-            `<p>${empName} (${employee.employeeCode || ''}) has requested the following profile changes:</p><ul>${fieldList}</ul><p>Please review and approve/reject from the HR dashboard.</p>`
+            `<p>${empName} (${employee.employeeCode || ''}) has requested the following profile changes:</p><ul>${fieldList}</ul><p style="margin-top: 20px;">
+         <a href="${approvalUrl}" 
+            style="background-color: #2563eb; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+            Review and Approve Request
+         </a>
+       </p>`
+	   <p style="margin-top: 15px; font-size: 12px; color: #666;">
+         If the button doesn't work, copy and paste this link: ${approvalUrl}
+       </p>`
           ).catch(() => {});
         }
       } catch (e) { console.error("Profile change notification error:", e); }
