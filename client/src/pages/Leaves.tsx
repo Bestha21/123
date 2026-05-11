@@ -242,15 +242,20 @@ export default function Leaves() {
           if (existingYear !== currentYear) latestByType[bal.leaveTypeId] = bal;
         }
       }
+            // Compute used days live from approved leave records for the current year
+      const approvedThisYear = empLeaves.filter(l =>
+        l.status === 'approved' && new Date(l.startDate + 'T00:00:00').getFullYear() === currentYear
+      );
       for (const bal of Object.values(latestByType)) {
         const lt = leaveTypesDb.find(t => t.id === bal.leaveTypeId);
         if (lt) {
-          const used = parseFloat(bal.used || "0");
           const accrued = parseFloat((bal as any).accrued || "0");
           const opening = parseFloat((bal as any).opening || "0");
           const total = (opening + accrued) > 0 ? (opening + accrued) : (lt.annualAllowance || 0);
-          // Always compute remaining as total - used so it stays in sync even
-          // if the DB `balance` column wasn't decremented on approval.
+          // Count used days from actual approved leave requests (always accurate)
+          const used = approvedThisYear
+            .filter(l => l.leaveTypeId === lt.id || l.leaveType === lt.code || leaveTypeCodeMap[l.leaveType] === lt.code)
+            .reduce((sum, l) => sum + parseFloat(l.days || "1"), 0);
           const remaining = Math.max(total - used, 0);
           map[lt.code] = {
             used,
