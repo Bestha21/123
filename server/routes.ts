@@ -500,6 +500,34 @@ export async function registerRoutes(
     await storage.deleteEmployee(Number(req.params.id));
     res.status(204).send();
   });
+  
+  // Delete Department
+app.delete("/api/departments/:id", async (req, res) => {
+  try {
+    const { authorized } = await checkUserRole(req, ["admin", "hr"]);
+    if (!authorized) {
+      return res.status(403).json({ message: "Only Admin/HR can delete departments" });
+    }
+
+    const deptId = Number(req.params.id);
+
+    // Safety Check: Verify no employees are assigned to this department
+    const employeesInDept = await storage.getEmployees();
+    const hasEmployees = employeesInDept.some(e => e.departmentId === deptId);
+
+    if (hasEmployees) {
+      return res.status(400).json({ 
+        message: "Cannot delete department: There are active employees assigned to it. Please reassign them first." 
+      });
+    }
+
+    await storage.deleteDepartment(deptId);
+    res.status(204).send();
+  } catch (error: any) {
+    console.error("Delete department error:", error);
+    res.status(500).json({ message: error.message || "Failed to delete department" });
+  }
+});
 
   // Entities
   app.get("/api/entities", async (req, res) => {

@@ -10,10 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Plus, Building2, Users, ChevronRight } from "lucide-react";
 import { queryClient, apiRequest } from "@/lib/queryClient";
 import type { Department, Employee } from "@shared/schema";
 import { useState } from "react";
+import { Plus, Building2, Users, ChevronRight, Trash2 } from "lucide-react";
 
 const departmentSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -66,6 +66,22 @@ export default function Departments() {
       toast({ title: "Failed to create department", variant: "destructive" });
     },
   });
+  
+  const deleteMutation = useMutation({
+  mutationFn: (id: number) => 
+    apiRequest("DELETE", `/api/departments/${id}`),
+  onSuccess: () => {
+    queryClient.invalidateQueries({ queryKey: ["/api/departments"] });
+    toast({ title: "Department deleted successfully" });
+  },
+  onError: (err: any) => {
+    toast({ 
+      title: "Failed to delete department", 
+      description: err.message || "Please ensure the department has no employees before deleting.",
+      variant: "destructive" 
+    });
+  },
+});
 
     const getEmployeeCount = (deptId: number) => {
     return employees?.filter(e => e.departmentId === deptId).length || 0;
@@ -279,25 +295,38 @@ export default function Departments() {
               <div className={`h-2 bg-gradient-to-r ${colorClass}`} />
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-lg">{dept.name}</CardTitle>
-                    {dept.description && (
-                      <p className="text-sm text-slate-500 mt-1">{dept.description}</p>
-                    )}
-                  </div>
-                  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colorClass} flex items-center justify-center text-white`}>
-                    <Building2 className="w-5 h-5" />
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2 text-slate-600">
-                    <Users className="w-4 h-4" />
-                    <span className="text-sm font-medium">{getEmployeeCount(dept.id)} employees</span>
-                  </div>
-                </div>
-                
+  <div className="flex-1">
+    <div className="flex items-center justify-between">
+      <CardTitle className="text-lg">{dept.name}</CardTitle>
+      
+      {/* DELETE OPTION */}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="text-slate-400 hover:text-red-600 hover:bg-red-50 -mt-2 -mr-2"
+        onClick={() => {
+          if (window.confirm(`Are you sure you want to delete the ${dept.name} department?`)) {
+            deleteMutation.mutate(dept.id);
+          }
+        }}
+        // Disable delete if department has employees to prevent database errors
+        disabled={deleteMutation.isPending || getEmployeeCount(dept.id) > 0}
+        title={getEmployeeCount(dept.id) > 0 ? "Cannot delete department with active employees" : "Delete Department"}
+      >
+        <Trash2 className="w-4 h-4" />
+      </Button>
+    </div>
+    
+    {dept.description && (
+      <p className="text-sm text-slate-500 mt-1">{dept.description}</p>
+    )}
+  </div>
+  
+  {/* Department Icon moved inside the flex container for better alignment */}
+  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colorClass} flex items-center justify-center text-white ml-4 shrink-0`}>
+    <Building2 className="w-5 h-5" />
+  </div>
+</div>
                 {deptEmployees.length > 0 ? (
                   <div className="space-y-2">
                     {deptEmployees.slice(0, 4).map((emp) => (

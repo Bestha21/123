@@ -358,6 +358,10 @@ export class DatabaseStorage implements IStorage {
     const [d] = await db.insert(departments).values(dept).returning();
     return d;
   }
+  
+  async deleteDepartment(id: number): Promise<void> {
+  await db.delete(departments).where(eq(departments.id, id));
+}
 
   // Documents
   async getDocuments(employeeId?: number): Promise<Document[]> {
