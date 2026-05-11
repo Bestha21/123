@@ -287,76 +287,85 @@ export default function Departments() {
         </Card>
       )}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {departments?.map((dept, index) => {
-          const deptEmployees = getDeptEmployees(dept.id);
-          const colorClass = colors[index % colors.length];
-          return (
-            <Card key={dept.id} data-testid={`department-card-${dept.id}`} className="overflow-hidden">
-              <div className={`h-2 bg-gradient-to-r ${colorClass}`} />
-              <CardHeader className="pb-3">
-                <div className="flex items-start justify-between">
-  <div className="flex-1">
-    <div className="flex items-center justify-between">
-      <CardTitle className="text-lg">{dept.name}</CardTitle>
-      
-      {/* DELETE OPTION */}
-      <Button
-        variant="ghost"
-        size="icon"
-        className="text-slate-400 hover:text-red-600 hover:bg-red-50 -mt-2 -mr-2"
-        onClick={() => {
-          if (window.confirm(`Are you sure you want to delete the ${dept.name} department?`)) {
-            deleteMutation.mutate(dept.id);
-          }
-        }}
-        // Disable delete if department has employees to prevent database errors
-        disabled={deleteMutation.isPending || getEmployeeCount(dept.id) > 0}
-        title={getEmployeeCount(dept.id) > 0 ? "Cannot delete department with active employees" : "Delete Department"}
-      >
-        <Trash2 className="w-4 h-4" />
-      </Button>
-    </div>
-    
-    {dept.description && (
-      <p className="text-sm text-slate-500 mt-1">{dept.description}</p>
-    )}
-  </div>
-  
-  {/* Department Icon moved inside the flex container for better alignment */}
-  <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colorClass} flex items-center justify-center text-white ml-4 shrink-0`}>
-    <Building2 className="w-5 h-5" />
-  </div>
-</div>
-                {deptEmployees.length > 0 ? (
-                  <div className="space-y-2">
-                    {deptEmployees.slice(0, 4).map((emp) => (
-                      <div key={emp.id} className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg">
-                        <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
-                          {emp.firstName?.[0]}{(emp.lastName || emp.firstName)?.[0]}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-slate-900 truncate">
-                            {emp.firstName} {emp.lastName || ''}
-                          </p>
-                          <p className="text-xs text-slate-500 truncate">{emp.designation}</p>
-                        </div>
-                      </div>
-                    ))}
-                    {deptEmployees.length > 4 && (
-                      <button className="w-full flex items-center justify-center gap-1 py-2 text-sm text-primary hover:underline">
-                        View all {deptEmployees.length} members
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    )}
+  {departments?.map((dept, index) => {
+    const deptEmployees = getDeptEmployees(dept.id);
+    const colorClass = colors[index % colors.length];
+    return (
+      <Card key={dept.id} data-testid={`department-card-${dept.id}`} className="overflow-hidden">
+        <div className={`h-2 bg-gradient-to-r ${colorClass}`} />
+        
+        <CardHeader className="pb-3">
+          <div className="flex items-start justify-between">
+            <div className="flex-1">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg">{dept.name}</CardTitle>
+                
+                {/* DELETE OPTION */}
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-slate-400 hover:text-red-600 hover:bg-red-50 -mt-2 -mr-2"
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete the ${dept.name} department?`)) {
+                      deleteMutation.mutate(dept.id);
+                    }
+                  }}
+                  disabled={deleteMutation.isPending || getEmployeeCount(dept.id) > 0}
+                  title={getEmployeeCount(dept.id) > 0 ? "Cannot delete department with active employees" : "Delete Department"}
+                >
+                  <Trash2 className="w-4 h-4" />
+                </Button>
+              </div>
+              
+              {dept.description && (
+                <p className="text-sm text-slate-500 mt-1">{dept.description}</p>
+              )}
+            </div>
+            
+            <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${colorClass} flex items-center justify-center text-white ml-4 shrink-0`}>
+              <Building2 className="w-5 h-5" />
+            </div>
+          </div>
+        </CardHeader> {/* <--- MAKE SURE THIS IS HERE */}
+
+        <CardContent>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2 text-slate-600">
+              <Users className="w-4 h-4" />
+              <span className="text-sm font-medium">{getEmployeeCount(dept.id)} employees</span>
+            </div>
+          </div>
+          
+          {deptEmployees.length > 0 ? (
+            <div className="space-y-2">
+              {deptEmployees.slice(0, 4).map((emp) => (
+                <div key={emp.id} className="flex items-center gap-3 py-2 px-3 bg-slate-50 rounded-lg">
+                  <div className="w-8 h-8 rounded-full bg-slate-200 flex items-center justify-center text-xs font-bold text-slate-600">
+                    {emp.firstName?.[0]}{(emp.lastName || emp.firstName)?.[0]}
                   </div>
-                ) : (
-                  <p className="text-sm text-slate-400 text-center py-4">No employees in this department</p>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900 truncate">
+                      {emp.firstName} {emp.lastName || ''}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">{emp.designation}</p>
+                  </div>
+                </div>
+              ))}
+              {deptEmployees.length > 4 && (
+                <button className="w-full flex items-center justify-center gap-1 py-2 text-sm text-primary hover:underline">
+                  View all {deptEmployees.length} members
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400 text-center py-4">No employees in this department</p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  })}
+</div>
 
       {!departments?.length && (
         <Card>
