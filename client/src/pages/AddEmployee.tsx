@@ -670,14 +670,18 @@ useEffect(() => {
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium">Confirmation Date</label>
-                    <Input type="date" {...form.register("confirmationDate")} data-testid="input-confirmationDate" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Probation End Date</label>
-                    <Input type="date" value={form.watch("probationEndDate") || ""} readOnly
-  className="bg-muted cursor-not-allowed" data-testid="input-probationEndDate" />
-                  </div>
+  <label className="text-sm font-medium">Probation End Date</label>
+
+  <Input
+    type="date"
+    {...form.register("probationEndDate")}
+    value={form.watch("probationEndDate") || ""}
+    onChange={() => {}}
+    readOnly
+    className="bg-muted cursor-not-allowed"
+    data-testid="input-probationEndDate"
+  />
+</div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
