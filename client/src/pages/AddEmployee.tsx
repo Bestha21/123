@@ -17,14 +17,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useLocation } from "wouter";
 import { useEntity } from "@/lib/entityContext";
 
-const formSchema = insertEmployeeSchema.extend({
-  joinDate: z.coerce.date().transform(d => d.toISOString().split('T')[0]),
-  probationEndDate: z
-    .coerce
-    .date()
-    .transform(d => d.toISOString().split('T')[0])
-    .optional(),
-});
+const formSchema = insertEmployeeSchema;
 
 type FormValues = z.infer<typeof formSchema>;
 
@@ -84,24 +77,16 @@ export default function AddEmployee() {
     }
   }, [autoGenerateCode, employees]);
   
-  const joinDate = useWatch({
+ const joinDate = useWatch({
   control: form.control,
   name: "joinDate",
 });
 
-const employmentStatus = useWatch({
-  control: form.control,
-  name: "employmentStatus",
-});
-
 useEffect(() => {
 
-  if (
-    joinDate &&
-    form.watch("employmentStatus") !== "confirmed"
-  ) {
+  if (joinDate) {
 
-    const probationDate = new Date(joinDate);
+    const probationDate = new Date(joinDate as string);
 
     if (!isNaN(probationDate.getTime())) {
 
@@ -116,7 +101,7 @@ useEffect(() => {
     }
   }
 
-}, [joinDate]);
+}, [joinDate, form]);
 
   const validateEmployeeCode = (code: string) => {
     if (!code) return true;
@@ -684,11 +669,9 @@ useEffect(() => {
                   <div className="space-y-2">
   <label className="text-sm font-medium">Probation End Date</label>
 
- <Input
+<Input
   type="date"
   {...form.register("probationEndDate")}
-  className="bg-muted cursor-not-allowed"
-  data-testid="input-probationEndDate"
 />
 </div>
                 </div>
