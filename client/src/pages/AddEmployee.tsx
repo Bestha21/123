@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
-import { useForm } from "react-hook-form";
+import { useForm, useWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEmployeeSchema } from "@shared/schema";
 import type { Entity } from "@shared/schema";
@@ -78,16 +78,19 @@ export default function AddEmployee() {
     }
   }, [autoGenerateCode, employees]);
   
-  const joinDate = form.watch("joinDate");
+  const joinDate = useWatch({
+  control: form.control,
+  name: "joinDate",
+});
 
 useEffect(() => {
-  if (joinDate && typeof joinDate === "string") {
+  if (joinDate) {
 
     const probationDate = new Date(joinDate);
 
     if (!isNaN(probationDate.getTime())) {
 
-      // Add 6 months
+      // Add 6 months probation period
       probationDate.setMonth(probationDate.getMonth() + 6);
 
       form.setValue(
