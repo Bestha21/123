@@ -675,7 +675,7 @@ useEffect(() => {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Probation End Date</label>
-                    <Input type="date" {...form.register("probationEndDate")} readOnly
+                    <Input type="date" value={form.watch("probationEndDate") || ""} readOnly
   className="bg-muted cursor-not-allowed" data-testid="input-probationEndDate" />
                   </div>
                 </div>
