@@ -84,10 +84,15 @@ export default function AddEmployee() {
   name: "joinDate",
 });
 
-useEffect(() => {
-  if (joinDate) {
+const employmentStatus = useWatch({
+  control: form.control,
+  name: "employmentStatus",
+});
 
-    console.log("Join Date:", joinDate);
+useEffect(() => {
+
+  // Only for probation employees
+  if (joinDate && employmentStatus === "probation") {
 
     const probationDate = new Date(joinDate);
 
@@ -95,19 +100,22 @@ useEffect(() => {
 
       probationDate.setMonth(probationDate.getMonth() + 6);
 
-      const formattedDate = probationDate
-        .toISOString()
-        .split("T")[0];
-
-      console.log("Probation Date:", formattedDate);
+      const formattedDate =
+        probationDate.toISOString().split("T")[0];
 
       form.setValue("probationEndDate", formattedDate, {
         shouldValidate: true,
         shouldDirty: true,
       });
     }
+
+  } else if (employmentStatus === "confirmed") {
+
+    // Clear probation end date for confirmed employees
+    form.setValue("probationEndDate", "");
+
   }
-}, [joinDate, form]);
+}, [joinDate, employmentStatus, form]);
 
   const validateEmployeeCode = (code: string) => {
     if (!code) return true;
