@@ -64,6 +64,7 @@ export default function AddEmployee() {
       lastName: "",
       email: "",
       designation: "",
+	  probationEndDate: "",
       status: "active",
       joinDate: new Date().toISOString().split('T')[0],
       employmentStatus: "probation",
@@ -86,31 +87,24 @@ export default function AddEmployee() {
 useEffect(() => {
   if (joinDate) {
 
-    // Handle dd-mm-yyyy format
-    const parts = joinDate.split("-");
+    console.log("Join Date:", joinDate);
 
-    if (parts.length === 3) {
+    const probationDate = new Date(joinDate);
 
-      const day = parseInt(parts[0], 10);
-      const month = parseInt(parts[1], 10) - 1;
-      const year = parseInt(parts[2], 10);
+    if (!isNaN(probationDate.getTime())) {
 
-      const probationDate = new Date(year, month, day);
+      probationDate.setMonth(probationDate.getMonth() + 6);
 
-      if (!isNaN(probationDate.getTime())) {
+      const formattedDate = probationDate
+        .toISOString()
+        .split("T")[0];
 
-        // Add 6 months
-        probationDate.setMonth(probationDate.getMonth() + 6);
+      console.log("Probation Date:", formattedDate);
 
-        const formattedDate =
-          probationDate.getDate().toString().padStart(2, "0") +
-          "-" +
-          (probationDate.getMonth() + 1).toString().padStart(2, "0") +
-          "-" +
-          probationDate.getFullYear();
-
-        form.setValue("probationEndDate", formattedDate);
-      }
+      form.setValue("probationEndDate", formattedDate, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
     }
   }
 }, [joinDate, form]);
