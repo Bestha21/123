@@ -298,6 +298,12 @@ export async function registerRoutes(
     try {
       const sanitizedBody = sanitizeEmployeeData(req.body);
       const input = api.employees.create.input.parse(sanitizedBody);
+      // Auto-compute probation end date = join date + 180 days (if not explicitly provided)
+      if (input.joinDate && !input.probationEndDate) {
+        const d = new Date(input.joinDate + 'T00:00:00');
+        d.setDate(d.getDate() + 180);
+        (input as any).probationEndDate = d.toISOString().split('T')[0];
+      }
       const emp = await storage.createEmployee(input);
       res.status(201).json(emp);
     } catch (err) {
@@ -434,6 +440,14 @@ export async function registerRoutes(
       const sanitizedBody = sanitizeEmployeeData(req.body);
       const input = api.employees.update.input.parse(sanitizedBody);
       const empId = Number(req.params.id);
+
+      // Auto-compute probation end date = join date + 180 days when join date changes
+      // (and a probation end date wasn't explicitly provided in this update)
+      if (input.joinDate && !input.probationEndDate) {
+        const d = new Date(input.joinDate + 'T00:00:00');
+        d.setDate(d.getDate() + 180);
+        (input as any).probationEndDate = d.toISOString().split('T')[0];
+      }
 
       if (input.pendingShiftId && input.shiftEffectiveDate) {
         const now = new Date();

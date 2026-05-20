@@ -163,7 +163,18 @@ export default function EditEmployee() {
   const shiftChanged = formData.shiftId !== originalShiftId;
 
   const updateField = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
+    setFormData(prev => {
+      const next: any = { ...prev, [field]: value };
+      // Auto-update probation end date when joining date changes (= joinDate + 180 days)
+      if (field === 'joinDate' && value) {
+        const d = new Date(value + 'T00:00:00');
+        if (!isNaN(d.getTime())) {
+          d.setDate(d.getDate() + 180);
+          next.probationEndDate = d.toISOString().split('T')[0];
+        }
+      }
+      return next;
+    });
     if (field === 'shiftId') {
       if (value === originalShiftId) {
         setShiftEffectiveDate("");

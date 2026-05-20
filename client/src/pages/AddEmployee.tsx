@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ArrowLeft, Save, Loader2 } from "lucide-react";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { insertEmployeeSchema } from "@shared/schema";
 import type { Entity } from "@shared/schema";
@@ -77,32 +77,18 @@ export default function AddEmployee() {
     }
   }, [autoGenerateCode, employees]);
   
- const joinDate = useWatch({
-  control: form.control,
-  name: "joinDate",
-});
-
-useEffect(() => {
-
-  if (joinDate) {
-
-    const probationDate = new Date(joinDate as string);
-
-    if (!isNaN(probationDate.getTime())) {
-
-      probationDate.setMonth(
-        probationDate.getMonth() + 6
-      );
-
-      form.setValue(
-        "probationEndDate",
-        probationDate.toISOString().split("T")[0]
-      );
+  // Auto-fill Probation End Date = Joining Date + 180 days whenever Joining Date changes
+  const watchedJoinDate = form.watch("joinDate");
+  useEffect(() => {
+    if (watchedJoinDate) {
+      const d = new Date(watchedJoinDate + "T00:00:00");
+      if (!isNaN(d.getTime())) {
+        d.setDate(d.getDate() + 180);
+        form.setValue("probationEndDate", d.toISOString().split("T")[0] as any);
+      }
     }
-  }
-
-}, [joinDate, form]);
-
+  }, [watchedJoinDate]);
+     
   const validateEmployeeCode = (code: string) => {
     if (!code) return true;
     return !allEmployees.some(e => e.employeeCode === code);
