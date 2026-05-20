@@ -96,31 +96,27 @@ const employmentStatus = useWatch({
 
 useEffect(() => {
 
-  // Only for probation employees
-  if (joinDate && employmentStatus === "probation") {
+  if (
+    joinDate &&
+    form.watch("employmentStatus") !== "confirmed"
+  ) {
 
     const probationDate = new Date(joinDate);
 
     if (!isNaN(probationDate.getTime())) {
 
-      probationDate.setMonth(probationDate.getMonth() + 6);
+      probationDate.setMonth(
+        probationDate.getMonth() + 6
+      );
 
-      const formattedDate =
-        probationDate.toISOString().split("T")[0];
-
-      form.setValue("probationEndDate", formattedDate, {
-        shouldValidate: true,
-        shouldDirty: true,
-      });
+      form.setValue(
+        "probationEndDate",
+        probationDate.toISOString().split("T")[0]
+      );
     }
-
-  } else if (employmentStatus === "confirmed") {
-
-    // Clear probation end date for confirmed employees
-    form.setValue("probationEndDate", "");
-
   }
-}, [joinDate, employmentStatus, form]);
+
+}, [joinDate]);
 
   const validateEmployeeCode = (code: string) => {
     if (!code) return true;
@@ -471,16 +467,27 @@ useEffect(() => {
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Employment Status</label>
-                    <Select onValueChange={(val) => form.setValue("employmentStatus", val)} defaultValue="probation">
-                      <SelectTrigger data-testid="select-employmentStatus">
-                        <SelectValue placeholder="Select" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="probation">Probation</SelectItem>
-                        <SelectItem value="confirmed">Confirmed</SelectItem>
-                        <SelectItem value="probation_extension">Probation Extension</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Select
+						  value={form.watch("employmentStatus")}
+						  onValueChange={(val) => {
+							form.setValue("employmentStatus", val, {
+							  shouldValidate: true,
+							  shouldDirty: true,
+							});
+						  }}
+						>
+						  <SelectTrigger data-testid="select-employmentStatus">
+							<SelectValue placeholder="Select" />
+						  </SelectTrigger>
+
+						  <SelectContent>
+							<SelectItem value="probation">Probation</SelectItem>
+							<SelectItem value="confirmed">Confirmed</SelectItem>
+							<SelectItem value="probation_extension">
+							  Probation Extension
+							</SelectItem>
+						  </SelectContent>
+						</Select>
                   </div>
                 </div>
 
