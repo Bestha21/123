@@ -19,6 +19,11 @@ import { useEntity } from "@/lib/entityContext";
 
 const formSchema = insertEmployeeSchema.extend({
   joinDate: z.coerce.date().transform(d => d.toISOString().split('T')[0]),
+  probationEndDate: z
+    .coerce
+    .date()
+    .transform(d => d.toISOString().split('T')[0])
+    .optional(),
 });
 
 type FormValues = z.infer<typeof formSchema>;
@@ -672,15 +677,13 @@ useEffect(() => {
                   <div className="space-y-2">
   <label className="text-sm font-medium">Probation End Date</label>
 
-  <Input
-    type="date"
-    {...form.register("probationEndDate")}
-    value={form.watch("probationEndDate") || ""}
-    onChange={() => {}}
-    readOnly
-    className="bg-muted cursor-not-allowed"
-    data-testid="input-probationEndDate"
-  />
+ <Input
+  type="date"
+  value={form.watch("probationEndDate") || ""}
+  readOnly
+  className="bg-muted cursor-not-allowed"
+  data-testid="input-probationEndDate"
+/>
 </div>
                 </div>
 
