@@ -86,17 +86,31 @@ export default function AddEmployee() {
 useEffect(() => {
   if (joinDate) {
 
-    const probationDate = new Date(joinDate);
+    // Handle dd-mm-yyyy format
+    const parts = joinDate.split("-");
 
-    if (!isNaN(probationDate.getTime())) {
+    if (parts.length === 3) {
 
-      // Add 6 months probation period
-      probationDate.setMonth(probationDate.getMonth() + 6);
+      const day = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const year = parseInt(parts[2], 10);
 
-      form.setValue(
-        "probationEndDate",
-        probationDate.toISOString().split("T")[0]
-      );
+      const probationDate = new Date(year, month, day);
+
+      if (!isNaN(probationDate.getTime())) {
+
+        // Add 6 months
+        probationDate.setMonth(probationDate.getMonth() + 6);
+
+        const formattedDate =
+          probationDate.getDate().toString().padStart(2, "0") +
+          "-" +
+          (probationDate.getMonth() + 1).toString().padStart(2, "0") +
+          "-" +
+          probationDate.getFullYear();
+
+        form.setValue("probationEndDate", formattedDate);
+      }
     }
   }
 }, [joinDate, form]);
