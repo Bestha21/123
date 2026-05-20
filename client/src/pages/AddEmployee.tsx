@@ -77,6 +77,22 @@ export default function AddEmployee() {
       form.setValue("employeeCode", generateEmployeeCode());
     }
   }, [autoGenerateCode, employees]);
+  
+  const joinDate = form.watch("joinDate");
+
+useEffect(() => {
+  if (joinDate) {
+    const probationDate = new Date(joinDate);
+
+    // Add 6 months probation period
+    probationDate.setMonth(probationDate.getMonth() + 6);
+
+    form.setValue(
+      "probationEndDate",
+      probationDate.toISOString().split("T")[0]
+    );
+  }
+}, [joinDate, form]);
 
   const validateEmployeeCode = (code: string) => {
     if (!code) return true;
@@ -636,7 +652,8 @@ export default function AddEmployee() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Probation End Date</label>
-                    <Input type="date" {...form.register("probationEndDate")} data-testid="input-probationEndDate" />
+                    <Input type="date" {...form.register("probationEndDate")} readOnly
+  className="bg-muted cursor-not-allowed" data-testid="input-probationEndDate" />
                   </div>
                 </div>
 
