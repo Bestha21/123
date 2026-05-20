@@ -81,16 +81,20 @@ export default function AddEmployee() {
   const joinDate = form.watch("joinDate");
 
 useEffect(() => {
-  if (joinDate) {
+  if (joinDate && typeof joinDate === "string") {
+
     const probationDate = new Date(joinDate);
 
-    // Add 6 months probation period
-    probationDate.setMonth(probationDate.getMonth() + 6);
+    if (!isNaN(probationDate.getTime())) {
 
-    form.setValue(
-      "probationEndDate",
-      probationDate.toISOString().split("T")[0]
-    );
+      // Add 6 months
+      probationDate.setMonth(probationDate.getMonth() + 6);
+
+      form.setValue(
+        "probationEndDate",
+        probationDate.toISOString().split("T")[0]
+      );
+    }
   }
 }, [joinDate, form]);
 
