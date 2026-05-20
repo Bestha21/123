@@ -679,8 +679,7 @@ useEffect(() => {
 
  <Input
   type="date"
-  value={form.watch("probationEndDate") || ""}
-  readOnly
+  {...form.register("probationEndDate")}
   className="bg-muted cursor-not-allowed"
   data-testid="input-probationEndDate"
 />
