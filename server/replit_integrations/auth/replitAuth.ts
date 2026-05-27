@@ -151,48 +151,77 @@ export async function setupAuth(app: Express) {
     });
   });
 
-  // Forgot password - request reset link
+    // Forgot password - request reset link
   app.post("/api/forgot-password", async (req, res) => {
+    const rawEmail = req.body?.email;
+    console.log(`[ForgotPwd] === START === raw input: "${rawEmail}"`);
     try {
-      const { email } = req.body;
-      if (!email) {
+      if (!rawEmail) {
+        console.log(`[ForgotPwd] FAIL: no email in request body`);
         return res.status(400).json({ message: "Email is required" });
       }
+      const email = String(rawEmail).trim().toLowerCase();
+      console.log(`[ForgotPwd] normalized: "${email}"`);
 
-      const user = await authStorage.getUserByEmail(email);
+      let user = await authStorage.getUserByEmail(email);
+      console.log(`[ForgotPwd] users-table lookup → found: ${!!user}${user ? ` (id=${user.id})` : ""}`);
+
       if (!user) {
-        // Don't reveal if email exists
-        return res.json({ 
-          success: true, 
-          message: "If an account with that email exists, a password reset link has been sent." 
+        const employeeRows = await db
+          .select()
+          .from(employees)
+          .where(sql`LOWER(TRIM(${employees.email})) = ${email}`);
+        const employee = employeeRows[0];
+        console.log(`[ForgotPwd] employees-table lookup → found: ${!!employee}${employee ? ` (code=${employee.employeeCode})` : ""}`);
+
+        if (employee) {
+          try {
+            user = await authStorage.createUser({
+              email: employee.email,
+              firstName: employee.firstName ?? null,
+              lastName: employee.lastName ?? null,
+              password: null,
+            } as any);
+            console.log(`[ForgotPwd] auto-created user account (id=${user.id})`);
+          } catch (createErr: any) {
+            console.error(`[ForgotPwd] auto-create FAILED:`, createErr.message);
+          }
+        }
+      }
+
+      if (!user) {
+        console.log(`[ForgotPwd] EXIT: no user found in either table — returning fake success`);
+        return res.json({
+          success: true,
+          message: "If an account with that email exists, a password reset link has been sent."
         });
       }
 
-      // Generate reset token
       const resetToken = crypto.randomBytes(32).toString("hex");
-      const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
+      const resetTokenExpiry = new Date(Date.now() + 60 * 60 * 1000);
       await authStorage.setResetToken(user.id, resetToken, resetTokenExpiry);
+      console.log(`[ForgotPwd] reset token stored for user id=${user.id}`);
 
-      // Build reset URL
-      const baseUrl = process.env.APP_URL 
-        || (process.env.REPL_ID ? `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co` : null)
+      const baseUrl = process.env.PRODUCTION_URL
+        || process.env.APP_URL
+        || (process.env.REPLIT_DOMAINS ? `https://${process.env.REPLIT_DOMAINS.split(',')[0]}` : null)
         || `http://localhost:${process.env.PORT || 5000}`;
       const resetUrl = `${baseUrl}/reset-password/${resetToken}`;
 
-      // Try to send email
+      console.log(`[ForgotPwd] about to call sendPasswordResetEmail to ${email}`);
       const emailSent = await sendPasswordResetEmail(email, resetUrl);
-      
+      console.log(`[ForgotPwd] sendPasswordResetEmail returned: ${emailSent}`);
+
       console.log("Password reset requested for:", email);
       console.log("Reset URL:", resetUrl);
 
-      res.json({ 
-        success: true, 
+      res.json({
+        success: true,
         message: "If an account with that email exists, a password reset link has been sent.",
-        resetUrl: emailSent ? undefined : resetUrl // Fallback: return URL if email fails
+        resetUrl: emailSent ? undefined : resetUrl
       });
     } catch (error: any) {
-      console.error("Forgot password error:", error);
+      console.error(`[ForgotPwd] CAUGHT ERROR:`, error.message, error.stack);
       res.status(500).json({ message: "Failed to process request" });
     }
   });
