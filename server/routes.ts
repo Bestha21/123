@@ -391,17 +391,33 @@ export async function registerRoutes(
           continue;
         }
 
-        const updateData: any = {};
+            const updateData: any = {};
         for (const field of fields) {
           if (field === matchField || BLOCKED_FIELDS.has(field)) continue;
           const val = row[field];
           if (val === undefined || val === null || val === "") continue;
 
           if (ALLOWED_INT_FIELDS.has(field)) {
-            const parsed = parseInt(val);
+            let parsed = parseInt(val);
             if (isNaN(parsed)) {
-              errors.push(`${matchValue}: Invalid number for ${field}: "${val}"`);
-              continue;
+              // Try to look up by name (e.g. "Karandeep Singh") or employee code
+              const lookupVal = String(val).trim().toLowerCase();
+              const found = allEmployees.find((e: any) => {
+                const fullName = `${e.firstName || ""} ${e.middleName || ""} ${e.lastName || ""}`
+                  .replace(/\s+/g, " ").trim().toLowerCase();
+                const shortName = `${e.firstName || ""} ${e.lastName || ""}`
+                  .replace(/\s+/g, " ").trim().toLowerCase();
+                return fullName === lookupVal
+                  || shortName === lookupVal
+                  || e.employeeCode?.toLowerCase() === lookupVal
+                  || e.email?.toLowerCase() === lookupVal;
+              });
+              if (found) {
+                parsed = found.id;
+              } else {
+                errors.push(`${matchValue}: Could not find employee for ${field}: "${val}"`);
+                continue;
+              }
             }
             updateData[field] = parsed;
           } else if (ALLOWED_BOOL_FIELDS.has(field)) {
@@ -7349,14 +7365,27 @@ Authorised Signatory
                 status,
               });
               action = 'check_out';
-            } else {
+                        } else {
+              // Already has both check-in and check-out — this is a later punch.
+              // Keep the FIRST check-in of the day; extend check-out to the latest punch.
+              const firstCheckIn = existing.checkIn ? new Date(existing.checkIn) : punchTime;
+              const workHours = ((punchTime.getTime() - firstCheckIn.getTime()) / (1000 * 60 * 60)).toFixed(2);
+
+              let status = existing.status || 'present';
+              if (parseFloat(workHours) < 4.5) {
+                status = 'full_day_deduction';
+              } else if (parseFloat(workHours) < 9 && parseFloat(workHours) >= 4.5 && status === 'present') {
+                status = 'half_day';
+              }
+
               await storage.updateAttendance(existing.id, {
-                checkIn: punchTime,
-                checkInLocation: `ADMS:${sn}`,
-                checkOut: null as any,
-                checkOutLocation: null as any,
+                checkOut: punchTime,
+                checkOutLocation: `ADMS:${sn}`,
+                workHours,
+                overtime: parseFloat(workHours) > 9 ? (parseFloat(workHours) - 9).toFixed(2) : "0",
+                status,
               });
-              action = 'check_in';
+              action = 'check_out';
             }
 
             await pool.query("UPDATE biometric_punch_logs SET processed = TRUE, processed_at = NOW() WHERE id = $1", [logId]);
