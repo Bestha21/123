@@ -9,7 +9,7 @@ import crypto from "crypto";
 import { sendPasswordResetEmail } from "../../email";
 import { db } from "../../db";
 import { employees } from "../../../shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 const isLocalDev = !process.env.REPL_ID && process.env.NODE_ENV !== 'production';
 
