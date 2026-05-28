@@ -1580,11 +1580,24 @@ app.delete("/api/departments/:id", async (req, res) => {
 
       let record = attendanceId ? await storage.getAttendanceById(attendanceId) : null;
 
-      // No attendance row yet (absent day) — create one with pending regularization
+            // Date-based path (absent day) — create or reuse a row
       if (!record && date) {
         if (!currentEmployee) return res.status(403).json({ message: "Employee not found" });
         const existing = await storage.getAttendanceByDate(currentEmployee.id, date);
+
         if (existing) {
+          // Block if the day already has a present/half_day record — regularization not needed
+          if (existing.checkIn && existing.checkOut && existing.status !== 'absent' && existing.status !== 'full_day_deduction') {
+            return res.status(400).json({ 
+              message: `You were marked ${existing.status?.replace(/_/g, ' ')} on ${date}. Regularization for an absent day is not allowed when the day already has punches.` 
+            });
+          }
+          // Block if there's already a pending request on this day
+          if (existing.regularizationStatus === 'pending') {
+            return res.status(400).json({ 
+              message: `A regularization request for ${date} is already pending approval.` 
+            });
+          }
           record = existing;
         } else {
           record = await storage.createAttendance({

@@ -1917,11 +1917,13 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
    const myPmsEntries = attendanceLogs.filter(a => {
     if (a.employeeId !== currentEmployee?.id) return false;
     if (a.regularizationStatus === 'approved') return false;
+    // Always show rows that have a pending or rejected request — even if status is 'present'.
+    const hasOpenRequest = a.regularizationStatus === 'pending' || a.regularizationStatus === 'rejected';
     // Show missing checkout, less than 9 hours worked, or absent
     const missingCheckout = !!a.checkIn && !a.checkOut;
     const shortHours = !!a.workHours && parseFloat(String(a.workHours)) < 9;
     const isAbsent = a.status === 'absent' || a.status === 'full_day_deduction';
-    return missingCheckout || shortHours || isAbsent;
+    return hasOpenRequest || missingCheckout || shortHours || isAbsent;
   }).sort((a, b) => b.date.localeCompare(a.date));
   
     const cancelRegMutation = useMutation({
