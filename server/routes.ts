@@ -66,6 +66,35 @@ function recomputeStatusByHours(currentStatus: string | null | undefined, hours:
   // leave / holiday / weekly_off / absent / on_duty / unknown — never touch
   return status;
 }
+// One-time self-heal: fixes any attendance rows where status doesn't match work_hours.
+// Safe to run repeatedly — only touches rows that need correcting.
+async function selfHealAttendanceStatuses() {
+  try {
+    const result = await pool.query(`
+      UPDATE attendance
+      SET status = CASE
+        WHEN work_hours < 4.5 THEN 'full_day_deduction'
+        WHEN work_hours >= 4.5 AND work_hours < 9 THEN 'half_day'
+        WHEN work_hours >= 9 THEN 'present'
+      END
+      WHERE check_in IS NOT NULL
+        AND check_out IS NOT NULL
+        AND work_hours IS NOT NULL
+        AND status IN ('present', 'half_day', 'full_day_deduction')
+        AND status <> CASE
+          WHEN work_hours < 4.5 THEN 'full_day_deduction'
+          WHEN work_hours >= 4.5 AND work_hours < 9 THEN 'half_day'
+          WHEN work_hours >= 9 THEN 'present'
+        END
+      RETURNING id
+    `);
+    if (result.rowCount && result.rowCount > 0) {
+      console.log(`[SelfHeal] Corrected status on ${result.rowCount} attendance rows`);
+    }
+  } catch (err: any) {
+    console.error('[SelfHeal] Failed:', err.message);
+  }
+}
 
 function letterResponsePage(title: string, message: string, type: 'success' | 'error' | 'warning' | 'info'): string {
   const colors: Record<string, { bg: string; icon: string; border: string }> = {
@@ -8478,6 +8507,8 @@ Authorised Signatory
 
   return httpServer;
 }
+  // Self-heal stale attendance statuses on every startup
+  selfHealAttendanceStatuses();
 
 async function seedDatabase() {
   const depts = await storage.getDepartments();
