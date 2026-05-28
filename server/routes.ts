@@ -39,6 +39,33 @@ function sanitizeEmployeeData(data: Record<string, any>): Record<string, any> {
   
   return sanitized;
 }
+// Recompute attendance status from final work hours.
+// Promotes back up (LOP → half_day → present) when hours catch up.
+// Preserves special statuses like leave, on_duty, holiday, weekly_off, absent.
+function recomputeStatusByHours(currentStatus: string | null | undefined, hours: number): string {
+  const status = currentStatus || 'present';
+  const tierStatuses = ['present', 'half_day', 'full_day_deduction'];
+
+  if (tierStatuses.includes(status)) {
+    if (hours < 4.5) return 'full_day_deduction';
+    if (hours < 9) return 'half_day';
+    return 'present';
+  }
+
+  // Late/early — apply deduction tier on top but keep semantic meaning where possible
+  if (status === 'late' || status === 'late_deducted') {
+    if (hours < 4.5) return 'full_day_deduction';
+    if (hours < 9) return 'half_day';
+    return status; // keep 'late' / 'late_deducted' if full hours
+  }
+  if (status === 'early_departure' || status === 'early_deducted') {
+    if (hours < 4.5) return 'full_day_deduction';
+    return status;
+  }
+
+  // leave / holiday / weekly_off / absent / on_duty / unknown — never touch
+  return status;
+}
 
 function letterResponsePage(title: string, message: string, type: 'success' | 'error' | 'warning' | 'info'): string {
   const colors: Record<string, { bg: string; icon: string; border: string }> = {
@@ -1571,7 +1598,7 @@ app.delete("/api/departments/:id", async (req, res) => {
         }
       }
 
-      const updated = await storage.updateAttendance(attendanceId, {
+            const updated = await storage.updateAttendance(record.id, {
         regularizationStatus: 'pending',
         regularizationReason: reason,
       });
@@ -7404,12 +7431,7 @@ Authorised Signatory
               const checkInTime = existing.checkIn ? new Date(existing.checkIn) : punchTime;
               const workHours = ((punchTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)).toFixed(2);
 
-              let status = existing.status || 'present';
-              if (parseFloat(workHours) < 4.5) {
-                status = 'full_day_deduction';
-              } else if (parseFloat(workHours) < 9 && parseFloat(workHours) >= 4.5 && status === 'present') {
-                status = 'half_day';
-              }
+             let status = recomputeStatusByHours(existing.status, parseFloat(workHours));
 
               await storage.updateAttendance(existing.id, {
                 checkOut: punchTime,
@@ -7425,12 +7447,7 @@ Authorised Signatory
               const firstCheckIn = existing.checkIn ? new Date(existing.checkIn) : punchTime;
               const workHours = ((punchTime.getTime() - firstCheckIn.getTime()) / (1000 * 60 * 60)).toFixed(2);
 
-              let status = existing.status || 'present';
-              if (parseFloat(workHours) < 4.5) {
-                status = 'full_day_deduction';
-              } else if (parseFloat(workHours) < 9 && parseFloat(workHours) >= 4.5 && status === 'present') {
-                status = 'half_day';
-              }
+              let status = recomputeStatusByHours(existing.status, parseFloat(workHours));
 
               await storage.updateAttendance(existing.id, {
                 checkOut: punchTime,
@@ -7639,13 +7656,9 @@ Authorised Signatory
           status = cycleEarlyCount >= 3 ? 'early_deducted' : 'early_departure';
         }
 
-        if (parseFloat(workHours) < 4.5) {
-          status = 'full_day_deduction';
-        } else if (parseFloat(workHours) < 9 && parseFloat(workHours) >= 4.5 && status === 'present') {
-          status = 'half_day';
-        }
+         status = recomputeStatusByHours(status, parseFloat(workHours));
 
-        result = await storage.updateAttendance(existing.id, {
+		  result = await storage.updateAttendance(existing.id, {
           checkOut: punchTime,
           checkOutLocation: 'Biometric',
           workHours,
@@ -7838,13 +7851,9 @@ Authorised Signatory
           status = cycleEarlyCount >= 3 ? 'early_deducted' : 'early_departure';
         }
 
-        if (parseFloat(workHours) < 4.5) {
-          status = 'full_day_deduction';
-        } else if (parseFloat(workHours) < 9 && parseFloat(workHours) >= 4.5 && status === 'present') {
-          status = 'half_day';
-        }
+        status = recomputeStatusByHours(status, parseFloat(workHours));
 
-        result = await storage.updateAttendance(existing.id, {
+		  result = await storage.updateAttendance(existing.id, {
           checkOut: punchTime,
           checkOutLocation: deviceIdRaw || 'Manual',
           workHours,

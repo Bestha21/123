@@ -1241,7 +1241,9 @@ function AttendanceLogTab({ currentEmployee, employees, isAdmin, shiftsData, all
           dayStatus = 'absent';
           statusLabel = 'Full Day Deduction (LOP)';
           statusColor = 'bg-red-100 text-red-700';
-          arrivalNote = 'Under 4.5 hrs';
+          arrivalNote = log.workHours 
+            ? `${parseFloat(String(log.workHours)).toFixed(2)} hrs (below 4.5)` 
+            : 'Under 4.5 hrs';
         } else if (log.status === 'early_departure' || log.status === 'early_deducted') {
           dayStatus = 'early';
           statusLabel = 'Early';
