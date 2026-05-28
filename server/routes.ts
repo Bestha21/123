@@ -1672,9 +1672,8 @@ app.delete("/api/departments/:id", async (req, res) => {
         return res.status(400).json({ message: "Only pending requests can be cancelled" });
       }
 
-      const updated = await storage.updateAttendance(parseInt(id), {
-        regularizationStatus: null as any,
-        regularizationReason: null as any,
+     const updated = await storage.updateAttendance(parseInt(id), {
+        regularizationStatus: 'cancelled' as any,
       });
       res.json(updated);
     } catch (err: any) {

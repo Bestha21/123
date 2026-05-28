@@ -1914,11 +1914,13 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
     queryKey: ["/api/attendance/pending-regularizations"],
   });
 
-   const myPmsEntries = attendanceLogs.filter(a => {
+      const myPmsEntries = attendanceLogs.filter(a => {
     if (a.employeeId !== currentEmployee?.id) return false;
     if (a.regularizationStatus === 'approved') return false;
-    // Always show rows that have a pending or rejected request — even if status is 'present'.
-    const hasOpenRequest = a.regularizationStatus === 'pending' || a.regularizationStatus === 'rejected';
+    // Always show rows that have a pending, rejected, or cancelled request — even if status is 'present'.
+    const hasOpenRequest = a.regularizationStatus === 'pending' 
+      || a.regularizationStatus === 'rejected' 
+      || a.regularizationStatus === 'cancelled';
     // Show missing checkout, less than 9 hours worked, or absent
     const missingCheckout = !!a.checkIn && !a.checkOut;
     const shortHours = !!a.workHours && parseFloat(String(a.workHours)) < 9;
@@ -2029,6 +2031,15 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
                           <Badge className="bg-yellow-100 text-yellow-700">Pending Approval</Badge>
                         ) : entry.regularizationStatus === 'rejected' ? (
                           <Badge className="bg-red-100 text-red-700">Rejected</Badge>
+                        ) : entry.regularizationStatus === 'cancelled' ? (
+                          <div>
+                            <Badge className="bg-slate-200 text-slate-700">Cancelled</Badge>
+                            {entry.regularizationReason && (
+                              <div className="text-[10px] text-muted-foreground mt-1 truncate max-w-[160px]" title={entry.regularizationReason}>
+                                Original: {entry.regularizationReason}
+                              </div>
+                            )}
+                          </div>
                         ) : (
                           <span className="text-xs text-muted-foreground">Not submitted</span>
                         )}
@@ -2040,7 +2051,7 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
                             onClick={() => cancelRegMutation.mutate(entry.id)}
                             data-testid={`button-cancel-reg-${entry.id}`}
                           ><XCircle className="w-3 h-3 mr-1" />Cancel Request</Button>
-                        ) : (!entry.regularizationStatus || entry.regularizationStatus === 'rejected') ? (
+                       ) : (!entry.regularizationStatus || entry.regularizationStatus === 'rejected' || entry.regularizationStatus === 'cancelled') ? (
                           selectedAttId === entry.id ? (
                             <div className="flex gap-1 items-center">
                               <Input
