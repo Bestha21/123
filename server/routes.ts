@@ -1511,17 +1511,39 @@ app.delete("/api/departments/:id", async (req, res) => {
     }
   });
 
-  app.post("/api/attendance/regularize", async (req, res) => {
+    app.post("/api/attendance/regularize", async (req, res) => {
     try {
       const user = req.user as any;
       const userEmail = user?.email || user?.claims?.email;
       if (!userEmail) return res.status(401).json({ message: "Unauthorized" });
       const currentEmployee = await storage.getEmployeeByEmail(userEmail);
 
-      const { attendanceId, reason } = req.body;
-      if (!attendanceId || !reason) return res.status(400).json({ message: "attendanceId and reason required" });
+      const { attendanceId, reason, date, requestedCheckIn, requestedCheckOut } = req.body;
+      if (!reason) return res.status(400).json({ message: "reason required" });
+      if (!attendanceId && !date) return res.status(400).json({ message: "attendanceId or date required" });
 
-      const record = await storage.getAttendanceById(attendanceId);
+      let record = attendanceId ? await storage.getAttendanceById(attendanceId) : null;
+
+      // No attendance row yet (absent day) — create one with pending regularization
+      if (!record && date) {
+        if (!currentEmployee) return res.status(403).json({ message: "Employee not found" });
+        const existing = await storage.getAttendanceByDate(currentEmployee.id, date);
+        if (existing) {
+          record = existing;
+        } else {
+          record = await storage.createAttendance({
+            employeeId: currentEmployee.id,
+            date,
+            checkIn: requestedCheckIn ? new Date(requestedCheckIn) : null as any,
+            checkOut: requestedCheckOut ? new Date(requestedCheckOut) : null as any,
+            status: 'absent',
+            regularizationStatus: 'pending',
+            regularizationReason: reason,
+          } as any);
+          return res.json(record);
+        }
+      }
+
       if (!record) return res.status(404).json({ message: "Attendance record not found" });
 
       const userRole = currentEmployee?.accessRole || "employee";
@@ -1552,6 +1574,38 @@ app.delete("/api/departments/:id", async (req, res) => {
       const updated = await storage.updateAttendance(attendanceId, {
         regularizationStatus: 'pending',
         regularizationReason: reason,
+      });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+    // Employee cancels their own pending regularization request
+  app.delete("/api/attendance/regularize/:id", async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userEmail = user?.email || user?.claims?.email;
+      if (!userEmail) return res.status(401).json({ message: "Unauthorized" });
+      const currentEmployee = await storage.getEmployeeByEmail(userEmail);
+      if (!currentEmployee) return res.status(403).json({ message: "Employee not found" });
+
+      const { id } = req.params;
+      const record = await storage.getAttendanceById(parseInt(id));
+      if (!record) return res.status(404).json({ message: "Attendance record not found" });
+
+      // Only owner can cancel their own request
+      if (record.employeeId !== currentEmployee.id) {
+        return res.status(403).json({ message: "You can only cancel your own regularization requests" });
+      }
+
+      // Only cancel if still pending
+      if (record.regularizationStatus !== 'pending') {
+        return res.status(400).json({ message: "Only pending requests can be cancelled" });
+      }
+
+      const updated = await storage.updateAttendance(parseInt(id), {
+        regularizationStatus: null as any,
+        regularizationReason: null as any,
       });
       res.json(updated);
     } catch (err: any) {

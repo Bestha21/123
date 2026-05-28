@@ -1912,9 +1912,47 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
     queryKey: ["/api/attendance/pending-regularizations"],
   });
 
-  const myPmsEntries = attendanceLogs.filter(a => 
-    a.employeeId === currentEmployee?.id && a.checkIn && !a.checkOut && a.regularizationStatus !== 'approved'
-  ).sort((a, b) => b.date.localeCompare(a.date));
+   const myPmsEntries = attendanceLogs.filter(a => {
+    if (a.employeeId !== currentEmployee?.id) return false;
+    if (a.regularizationStatus === 'approved') return false;
+    // Show missing checkout, less than 9 hours worked, or absent
+    const missingCheckout = !!a.checkIn && !a.checkOut;
+    const shortHours = !!a.workHours && parseFloat(String(a.workHours)) < 9;
+    const isAbsent = a.status === 'absent' || a.status === 'full_day_deduction';
+    return missingCheckout || shortHours || isAbsent;
+  }).sort((a, b) => b.date.localeCompare(a.date));
+  
+    const cancelRegMutation = useMutation({
+    mutationFn: async (id: number) => {
+      return apiRequest("DELETE", `/api/attendance/regularize/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/pending-regularizations"] });
+      toast({ title: "Regularization cancelled" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to cancel", description: err.message, variant: "destructive" });
+    }
+  });
+
+  const [absentDate, setAbsentDate] = useState("");
+  const [absentReason, setAbsentReason] = useState("");
+  const submitAbsentRegMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("POST", "/api/attendance/regularize", { date: absentDate, reason: absentReason });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/attendance/pending-regularizations"] });
+      toast({ title: "Regularization submitted for absent day" });
+      setAbsentDate("");
+      setAbsentReason("");
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to submit", description: err.message, variant: "destructive" });
+    }
+  });
 
   const submitRegMutation = useMutation({
     mutationFn: async ({ attendanceId, reason }: { attendanceId: number; reason: string }) => {
@@ -1959,9 +1997,11 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
             ) : (
               <Table>
                 <TableHeader>
-                  <TableRow>
+                                    <TableRow>
                     <TableHead>Date</TableHead>
                     <TableHead>Check In</TableHead>
+                    <TableHead>Check Out</TableHead>
+                    <TableHead>Hours</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead>Regularization</TableHead>
                     <TableHead>Action</TableHead>
@@ -1972,7 +2012,14 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
                     <TableRow key={entry.id}>
                       <TableCell className="text-sm">{entry.date}</TableCell>
                       <TableCell className="text-sm">{entry.checkIn ? format(new Date(entry.checkIn), 'hh:mm a') : '-'}</TableCell>
-                      <TableCell><Badge className="bg-orange-100 text-orange-700">PMS</Badge></TableCell>
+                      <TableCell className="text-sm">{entry.checkOut ? format(new Date(entry.checkOut), 'hh:mm a') : '-'}</TableCell>
+                      <TableCell className="text-sm">{entry.workHours || '-'}</TableCell>
+                      <TableCell>
+                        {entry.status === 'absent' ? <Badge className="bg-red-100 text-red-700">Absent</Badge>
+                          : entry.status === 'full_day_deduction' ? <Badge className="bg-red-100 text-red-700">LOP</Badge>
+                          : entry.checkIn && !entry.checkOut ? <Badge className="bg-orange-100 text-orange-700">Missing Punch</Badge>
+                          : <Badge className="bg-yellow-100 text-yellow-700">Short Hours</Badge>}
+                      </TableCell>
                       <TableCell>
                         {entry.regularizationStatus === 'pending' ? (
                           <Badge className="bg-yellow-100 text-yellow-700">Pending Approval</Badge>
@@ -1982,12 +2029,18 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
                           <span className="text-xs text-muted-foreground">Not submitted</span>
                         )}
                       </TableCell>
-                      <TableCell>
-                        {!entry.regularizationStatus || entry.regularizationStatus === 'rejected' ? (
+                                            <TableCell>
+                        {entry.regularizationStatus === 'pending' ? (
+                          <Button size="sm" variant="outline" className="h-7 text-xs text-red-600 hover:bg-red-50"
+                            disabled={cancelRegMutation.isPending}
+                            onClick={() => cancelRegMutation.mutate(entry.id)}
+                            data-testid={`button-cancel-reg-${entry.id}`}
+                          ><XCircle className="w-3 h-3 mr-1" />Cancel Request</Button>
+                        ) : (!entry.regularizationStatus || entry.regularizationStatus === 'rejected') ? (
                           selectedAttId === entry.id ? (
                             <div className="flex gap-1 items-center">
                               <Input
-                                placeholder="Reason for missed punch"
+                                placeholder="Reason"
                                 value={regReason}
                                 onChange={e => setRegReason(e.target.value)}
                                 className="h-7 text-xs w-48"
@@ -2012,6 +2065,31 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
                 </TableBody>
               </Table>
             )}
+          </CardContent>
+                </Card>
+      )}
+
+      {currentEmployee && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Request Regularization for an Absent Day</CardTitle>
+            <p className="text-xs text-muted-foreground">Use this if a day is missing from your attendance list above (e.g. you were absent or didn't swipe at all).</p>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2 items-end flex-wrap">
+              <div>
+                <label className="text-xs text-muted-foreground block mb-1">Date</label>
+                <Input type="date" value={absentDate} onChange={e => setAbsentDate(e.target.value)} className="h-8 text-sm w-44" data-testid="input-absent-date" />
+              </div>
+              <div className="flex-1 min-w-[200px]">
+                <label className="text-xs text-muted-foreground block mb-1">Reason</label>
+                <Input value={absentReason} onChange={e => setAbsentReason(e.target.value)} placeholder="Why was this day missed?" className="h-8 text-sm" data-testid="input-absent-reason" />
+              </div>
+              <Button size="sm" className="h-8" disabled={!absentDate || !absentReason.trim() || submitAbsentRegMutation.isPending}
+                onClick={() => submitAbsentRegMutation.mutate()}
+                data-testid="button-submit-absent-reg"
+              >Submit Request</Button>
+            </div>
           </CardContent>
         </Card>
       )}
