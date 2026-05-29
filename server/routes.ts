@@ -96,6 +96,136 @@ async function selfHealAttendanceStatuses() {
   }
 }
 
+// Shared, order-independent punch resolver.
+// Treats the EARLIEST punch of the day as check-in and the LATEST as check-out,
+// so punches arriving out of order (e.g. from two devices) cannot corrupt the record.
+// Recomputes late / early-departure / hours-based status; preserves special statuses.
+async function applyPunchToAttendance(
+  employee: any,
+  today: string,
+  punchTime: Date,
+  location: string,
+  existing: any
+): Promise<{ action: string; record: any }> {
+  const protectedStatuses = ['leave', 'holiday', 'weekly_off', 'on_duty', 'absent'];
+
+  const cycleRangeFor = (d: Date): { start: string; end: string } => {
+    let cs: Date, ce: Date;
+    if (d.getDate() >= 26) {
+      cs = new Date(d.getFullYear(), d.getMonth(), 26);
+      ce = new Date(d.getFullYear(), d.getMonth() + 1, 25);
+    } else {
+      cs = new Date(d.getFullYear(), d.getMonth() - 1, 26);
+      ce = new Date(d.getFullYear(), d.getMonth(), 25);
+    }
+    return { start: format(cs, 'yyyy-MM-dd'), end: format(ce, 'yyyy-MM-dd') };
+  };
+
+  // Late status derived from the check-in (earliest) punch.
+  const arrivalStatus = async (ci: Date): Promise<string> => {
+    const ciTotal = ci.getHours() * 60 + ci.getMinutes();
+    let shiftStart = 9 * 60 + 30;
+    let lateThreshold = 10 * 60;
+    if (employee.shiftId) {
+      const empShift = await storage.getShift(employee.shiftId);
+      if (empShift?.startTime) {
+        const [ssh, ssm] = empShift.startTime.split(':').map(Number);
+        shiftStart = ssh * 60 + ssm;
+        lateThreshold = shiftStart + 30;
+      }
+    }
+    if (ciTotal > lateThreshold) return 'half_day';
+    if (ciTotal > shiftStart) {
+      const { start, end } = cycleRangeFor(ci);
+      const cycleLogs = await storage.getAttendanceByDateRange(start, end, employee.id);
+      const lateCount = cycleLogs.filter((l: any) => (l.status === 'late' || l.status === 'late_deducted') && l.id !== existing?.id).length;
+      return lateCount >= 3 ? 'late_deducted' : 'late';
+    }
+    return 'present';
+  };
+
+  // First punch of the day → create the row.
+  if (!existing) {
+    const status = await arrivalStatus(punchTime);
+    const record = await storage.createAttendance({
+      employeeId: employee.id,
+      date: today,
+      checkIn: punchTime,
+      checkInLocation: location,
+      status,
+    });
+    return { action: 'check_in', record };
+  }
+
+  // Earliest known punch = check-in, latest = check-out (order-independent).
+  const candidates: { t: number; loc: string | null }[] = [];
+  if (existing.checkIn) candidates.push({ t: new Date(existing.checkIn).getTime(), loc: existing.checkInLocation || null });
+  if (existing.checkOut) candidates.push({ t: new Date(existing.checkOut).getTime(), loc: existing.checkOutLocation || null });
+  candidates.push({ t: punchTime.getTime(), loc: location });
+  const minT = Math.min(...candidates.map(c => c.t));
+  const maxT = Math.max(...candidates.map(c => c.t));
+  const newCheckIn = new Date(minT);
+  const newCheckOut = maxT > minT ? new Date(maxT) : null;
+  const checkInLoc = candidates.find(c => c.t === minT)?.loc || location;
+  const checkOutLoc = newCheckOut ? (candidates.find(c => c.t === maxT)?.loc || location) : null;
+
+  let status = existing.status || 'present';
+
+  // Recompute late status if the check-in instant changed (and not a protected status).
+  if (!protectedStatuses.includes(status)) {
+    const prevCi = existing.checkIn ? new Date(existing.checkIn).getTime() : null;
+    if (prevCi === null || newCheckIn.getTime() !== prevCi) {
+      status = await arrivalStatus(newCheckIn);
+    }
+  }
+
+  let workHours: string | null = existing.workHours || null;
+  let overtime = existing.overtime || "0";
+
+  if (newCheckOut) {
+    workHours = ((newCheckOut.getTime() - newCheckIn.getTime()) / (1000 * 60 * 60)).toFixed(2);
+    overtime = parseFloat(workHours) > 9 ? (parseFloat(workHours) - 9).toFixed(2) : "0";
+
+    if (!protectedStatuses.includes(status)) {
+      // Early-departure status from the LATEST punch.
+      const coTotal = newCheckOut.getHours() * 60 + newCheckOut.getMinutes();
+      let shiftEnd = 18 * 60 + 30;
+      let earlyThreshold = 18 * 60;
+      if (employee.shiftId) {
+        const empShift = await storage.getShift(employee.shiftId);
+        if (empShift?.endTime) {
+          const [seh, sem] = empShift.endTime.split(':').map(Number);
+          shiftEnd = seh * 60 + sem;
+          earlyThreshold = shiftEnd - 30;
+        }
+      }
+      if (coTotal < earlyThreshold && !['half_day', 'late_deducted'].includes(status)) {
+        status = 'half_day';
+      } else if (coTotal < shiftEnd && coTotal >= earlyThreshold && (status === 'present' || status === 'late')) {
+        const { start, end } = cycleRangeFor(newCheckOut);
+        const cycleLogs = await storage.getAttendanceByDateRange(start, end, employee.id);
+        const earlyCount = cycleLogs.filter((l: any) => l.date !== today && (l.status === 'early_departure' || l.status === 'early_deducted')).length;
+        status = earlyCount >= 3 ? 'early_deducted' : 'early_departure';
+      }
+
+      // Final hours-tier promotion/demotion.
+      status = recomputeStatusByHours(status, parseFloat(workHours));
+    }
+  }
+
+  const record = await storage.updateAttendance(existing.id, {
+    checkIn: newCheckIn,
+    checkInLocation: checkInLoc,
+    checkOut: newCheckOut as any,
+    checkOutLocation: newCheckOut ? checkOutLoc : (null as any),
+    workHours: workHours as any,
+    overtime,
+    status,
+  });
+
+  return { action: newCheckOut ? 'check_out' : 'check_in', record };
+}
+
 function letterResponsePage(title: string, message: string, type: 'success' | 'error' | 'warning' | 'info'): string {
   const colors: Record<string, { bg: string; icon: string; border: string }> = {
     success: { bg: '#dcfce7', icon: '✅', border: '#22c55e' },
@@ -7426,79 +7556,7 @@ Authorised Signatory
             const today = format(punchTime, 'yyyy-MM-dd');
             const existing = await storage.getAttendanceByDate(employee.id, today);
 
-            let action: string;
-
-            if (!existing) {
-              const checkInHour = punchTime.getHours();
-              const checkInMin = punchTime.getMinutes();
-              const totalMinutes = checkInHour * 60 + checkInMin;
-              let cdataShiftStart = 9 * 60 + 30;
-              let cdataLateThreshold = 10 * 60;
-              if (employee.shiftId) {
-                const empShift = await storage.getShift(employee.shiftId);
-                if (empShift?.startTime) {
-                  const [ssh, ssm] = empShift.startTime.split(':').map(Number);
-                  cdataShiftStart = ssh * 60 + ssm;
-                  cdataLateThreshold = cdataShiftStart + 30;
-                }
-              }
-
-              let status = 'present';
-              if (totalMinutes > cdataLateThreshold) {
-                status = 'half_day';
-              } else if (totalMinutes > cdataShiftStart) {
-                let cycleStart: Date, cycleEnd: Date;
-                if (punchTime.getDate() >= 26) {
-                  cycleStart = new Date(punchTime.getFullYear(), punchTime.getMonth(), 26);
-                  cycleEnd = new Date(punchTime.getFullYear(), punchTime.getMonth() + 1, 25);
-                } else {
-                  cycleStart = new Date(punchTime.getFullYear(), punchTime.getMonth() - 1, 26);
-                  cycleEnd = new Date(punchTime.getFullYear(), punchTime.getMonth(), 25);
-                }
-                const cycleLogs = await storage.getAttendanceByDateRange(format(cycleStart, 'yyyy-MM-dd'), format(cycleEnd, 'yyyy-MM-dd'), employee.id);
-                const cycleLateCount = cycleLogs.filter((l: any) => l.status === 'late' || l.status === 'late_deducted').length;
-                status = cycleLateCount >= 3 ? 'late_deducted' : 'late';
-              }
-
-              await storage.createAttendance({
-                employeeId: employee.id,
-                date: today,
-                checkIn: punchTime,
-                checkInLocation: `ADMS:${sn}`,
-                status,
-              });
-              action = 'check_in';
-            } else if (!existing.checkOut) {
-              const checkInTime = existing.checkIn ? new Date(existing.checkIn) : punchTime;
-              const workHours = ((punchTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)).toFixed(2);
-
-             let status = recomputeStatusByHours(existing.status, parseFloat(workHours));
-
-              await storage.updateAttendance(existing.id, {
-                checkOut: punchTime,
-                checkOutLocation: `ADMS:${sn}`,
-                workHours,
-                overtime: parseFloat(workHours) > 9 ? (parseFloat(workHours) - 9).toFixed(2) : "0",
-                status,
-              });
-              action = 'check_out';
-                        } else {
-              // Already has both check-in and check-out — this is a later punch.
-              // Keep the FIRST check-in of the day; extend check-out to the latest punch.
-              const firstCheckIn = existing.checkIn ? new Date(existing.checkIn) : punchTime;
-              const workHours = ((punchTime.getTime() - firstCheckIn.getTime()) / (1000 * 60 * 60)).toFixed(2);
-
-              let status = recomputeStatusByHours(existing.status, parseFloat(workHours));
-
-              await storage.updateAttendance(existing.id, {
-                checkOut: punchTime,
-                checkOutLocation: `ADMS:${sn}`,
-                workHours,
-                overtime: parseFloat(workHours) > 9 ? (parseFloat(workHours) - 9).toFixed(2) : "0",
-                status,
-              });
-              action = 'check_out';
-            }
+            const { action } = await applyPunchToAttendance(employee, today, punchTime, `ADMS:${sn}`, existing);
 
             await pool.query("UPDATE biometric_punch_logs SET processed = TRUE, processed_at = NOW() WHERE id = $1", [logId]);
             console.log(`[ADMS] ${action}: ${employee.employeeCode} (${employee.firstName}) at ${format(punchTime, 'HH:mm:ss')}`);
@@ -7608,137 +7666,17 @@ Authorised Signatory
       const today = format(punchTime, 'yyyy-MM-dd');
       const existing = await storage.getAttendanceByDate(employee.id, today);
 
-      let result;
-      let action: string;
+      const { action, record } = await applyPunchToAttendance(employee, today, punchTime, 'Biometric', existing);
 
-      if (!existing) {
-        const checkInHour = punchTime.getHours();
-        const checkInMin = punchTime.getMinutes();
-        const totalMinutes = checkInHour * 60 + checkInMin;
-        let bioCiShiftStart = 9 * 60 + 30;
-        let bioCiLateThreshold = 10 * 60;
-        if (employee.shiftId) {
-          const empShift = await storage.getShift(employee.shiftId);
-          if (empShift?.startTime) {
-            const [ssh, ssm] = empShift.startTime.split(':').map(Number);
-            bioCiShiftStart = ssh * 60 + ssm;
-            bioCiLateThreshold = bioCiShiftStart + 30;
-          }
-        }
-
-        let status = 'present';
-        if (totalMinutes > bioCiLateThreshold) {
-          status = 'half_day';
-        } else if (totalMinutes > bioCiShiftStart) {
-          let cycleStart: Date, cycleEnd: Date;
-          if (punchTime.getDate() >= 26) {
-            cycleStart = new Date(punchTime.getFullYear(), punchTime.getMonth(), 26);
-            cycleEnd = new Date(punchTime.getFullYear(), punchTime.getMonth() + 1, 25);
-          } else {
-            cycleStart = new Date(punchTime.getFullYear(), punchTime.getMonth() - 1, 26);
-            cycleEnd = new Date(punchTime.getFullYear(), punchTime.getMonth(), 25);
-          }
-          const cycleLogs = await storage.getAttendanceByDateRange(format(cycleStart, 'yyyy-MM-dd'), format(cycleEnd, 'yyyy-MM-dd'), employee.id);
-          const cycleLateCount = cycleLogs.filter((l: any) => l.status === 'late' || l.status === 'late_deducted').length;
-          status = cycleLateCount >= 3 ? 'late_deducted' : 'late';
-        }
-
-        result = await storage.createAttendance({
+      try {
+        await storage.createAttendanceLog({
           employeeId: employee.id,
-          date: today,
-          checkIn: punchTime,
-          checkInLocation: 'Biometric',
-          status,
+          attendanceId: record.id,
+          type: action === 'check_in' ? 'check_in' : 'check_out',
+          timestamp: punchTime,
+          location: 'Biometric',
         });
-        action = 'check_in';
-
-        try {
-          await storage.createAttendanceLog({
-            employeeId: employee.id,
-            attendanceId: result.id,
-            type: 'check_in',
-            timestamp: punchTime,
-            location: 'Biometric',
-          });
-        } catch (e) {}
-      } else if (!existing.checkOut) {
-        // Has check-in but no check-out → check-out
-        const checkInTime = existing.checkIn ? new Date(existing.checkIn) : punchTime;
-        const workHours = ((punchTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)).toFixed(2);
-
-        const checkOutHour = punchTime.getHours();
-        const checkOutMin = punchTime.getMinutes();
-        const bioCoTotalMin = checkOutHour * 60 + checkOutMin;
-        let bioShiftEnd = 18 * 60 + 30;
-        let bioEarlyThreshold = 18 * 60;
-        if (employee.shiftId) {
-          const empShift = await storage.getShift(employee.shiftId);
-          if (empShift?.endTime) {
-            const [seh, sem] = empShift.endTime.split(':').map(Number);
-            bioShiftEnd = seh * 60 + sem;
-            bioEarlyThreshold = bioShiftEnd - 30;
-          }
-        }
-
-        let status = existing.status || 'present';
-        if (bioCoTotalMin < bioEarlyThreshold && !['half_day', 'late_deducted'].includes(status)) {
-          status = 'half_day';
-        } else if (bioCoTotalMin < bioShiftEnd && bioCoTotalMin >= bioEarlyThreshold && (status === 'present' || status === 'late')) {
-          let cycleStart: Date, cycleEnd: Date;
-          if (punchTime.getDate() >= 26) {
-            cycleStart = new Date(punchTime.getFullYear(), punchTime.getMonth(), 26);
-            cycleEnd = new Date(punchTime.getFullYear(), punchTime.getMonth() + 1, 25);
-          } else {
-            cycleStart = new Date(punchTime.getFullYear(), punchTime.getMonth() - 1, 26);
-            cycleEnd = new Date(punchTime.getFullYear(), punchTime.getMonth(), 25);
-          }
-          const cycleLogs = await storage.getAttendanceByDateRange(format(cycleStart, 'yyyy-MM-dd'), format(cycleEnd, 'yyyy-MM-dd'), employee.id);
-          const cycleEarlyCount = cycleLogs.filter((l: any) => l.date !== today && (l.status === 'early_departure' || l.status === 'early_deducted')).length;
-          status = cycleEarlyCount >= 3 ? 'early_deducted' : 'early_departure';
-        }
-
-         status = recomputeStatusByHours(status, parseFloat(workHours));
-
-		  result = await storage.updateAttendance(existing.id, {
-          checkOut: punchTime,
-          checkOutLocation: 'Biometric',
-          workHours,
-          overtime: parseFloat(workHours) > 9 ? (parseFloat(workHours) - 9).toFixed(2) : "0",
-          status,
-        });
-        action = 'check_out';
-
-        try {
-          await storage.createAttendanceLog({
-            employeeId: employee.id,
-            attendanceId: existing.id,
-            type: 'check_out',
-            timestamp: punchTime,
-            location: 'Biometric',
-          });
-        } catch (e) {}
-      } else {
-        // Already has check-in and check-out → treat as re-entry (new check-in)
-        result = await storage.updateAttendance(existing.id, {
-          checkIn: punchTime,
-          checkInLocation: 'Biometric',
-          checkOut: null as any,
-          checkOutLocation: null as any,
-          checkOutLatitude: null as any,
-          checkOutLongitude: null as any,
-        });
-        action = 'check_in';
-
-        try {
-          await storage.createAttendanceLog({
-            employeeId: employee.id,
-            attendanceId: existing.id,
-            type: 'check_in',
-            timestamp: punchTime,
-            location: 'Biometric',
-          });
-        } catch (e) {}
-      }
+      } catch (e) {}
 
       // Update device last sync
       if (deviceIdRaw) {
@@ -7804,135 +7742,17 @@ Authorised Signatory
       const today = format(punchTime, 'yyyy-MM-dd');
       const existing = await storage.getAttendanceByDate(employee.id, today);
 
-      let result;
-      let action: string;
+      const { action, record } = await applyPunchToAttendance(employee, today, punchTime, deviceIdRaw || 'Manual', existing);
 
-      if (!existing) {
-        const checkInHour = punchTime.getHours();
-        const checkInMin = punchTime.getMinutes();
-        const totalMinutes = checkInHour * 60 + checkInMin;
-        let simCiShiftStart = 9 * 60 + 30;
-        let simCiLateThreshold = 10 * 60;
-        if (employee.shiftId) {
-          const empShift = await storage.getShift(employee.shiftId);
-          if (empShift?.startTime) {
-            const [ssh, ssm] = empShift.startTime.split(':').map(Number);
-            simCiShiftStart = ssh * 60 + ssm;
-            simCiLateThreshold = simCiShiftStart + 30;
-          }
-        }
-
-        let status = 'present';
-        if (totalMinutes > simCiLateThreshold) {
-          status = 'half_day';
-        } else if (totalMinutes > simCiShiftStart) {
-          let cycleStart: Date, cycleEnd: Date;
-          if (punchTime.getDate() >= 26) {
-            cycleStart = new Date(punchTime.getFullYear(), punchTime.getMonth(), 26);
-            cycleEnd = new Date(punchTime.getFullYear(), punchTime.getMonth() + 1, 25);
-          } else {
-            cycleStart = new Date(punchTime.getFullYear(), punchTime.getMonth() - 1, 26);
-            cycleEnd = new Date(punchTime.getFullYear(), punchTime.getMonth(), 25);
-          }
-          const cycleLogs = await storage.getAttendanceByDateRange(format(cycleStart, 'yyyy-MM-dd'), format(cycleEnd, 'yyyy-MM-dd'), employee.id);
-          const cycleLateCount = cycleLogs.filter((l: any) => l.status === 'late' || l.status === 'late_deducted').length;
-          status = cycleLateCount >= 3 ? 'late_deducted' : 'late';
-        }
-
-        result = await storage.createAttendance({
+      try {
+        await storage.createAttendanceLog({
           employeeId: employee.id,
-          date: today,
-          checkIn: punchTime,
-          checkInLocation: deviceIdRaw || 'Manual',
-          status,
+          attendanceId: record.id,
+          type: action === 'check_in' ? 'check_in' : 'check_out',
+          timestamp: punchTime,
+          location: deviceIdRaw || 'Manual',
         });
-        action = 'check_in';
-
-        try {
-          await storage.createAttendanceLog({
-            employeeId: employee.id,
-            attendanceId: result.id,
-            type: 'check_in',
-            timestamp: punchTime,
-            location: deviceIdRaw || 'Manual',
-          });
-        } catch (e) {}
-      } else if (!existing.checkOut) {
-        const checkInTime = existing.checkIn ? new Date(existing.checkIn) : punchTime;
-        const workHours = ((punchTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)).toFixed(2);
-
-        const checkOutHour = punchTime.getHours();
-        const checkOutMin = punchTime.getMinutes();
-        const simCoTotalMin = checkOutHour * 60 + checkOutMin;
-        let simShiftEnd = 18 * 60 + 30;
-        let simEarlyThreshold = 18 * 60;
-        if (employee.shiftId) {
-          const empShift = await storage.getShift(employee.shiftId);
-          if (empShift?.endTime) {
-            const [seh, sem] = empShift.endTime.split(':').map(Number);
-            simShiftEnd = seh * 60 + sem;
-            simEarlyThreshold = simShiftEnd - 30;
-          }
-        }
-
-        let status = existing.status || 'present';
-        if (simCoTotalMin < simEarlyThreshold && !['half_day', 'late_deducted'].includes(status)) {
-          status = 'half_day';
-        } else if (simCoTotalMin < simShiftEnd && simCoTotalMin >= simEarlyThreshold && (status === 'present' || status === 'late')) {
-          let cycleStart: Date, cycleEnd: Date;
-          if (punchTime.getDate() >= 26) {
-            cycleStart = new Date(punchTime.getFullYear(), punchTime.getMonth(), 26);
-            cycleEnd = new Date(punchTime.getFullYear(), punchTime.getMonth() + 1, 25);
-          } else {
-            cycleStart = new Date(punchTime.getFullYear(), punchTime.getMonth() - 1, 26);
-            cycleEnd = new Date(punchTime.getFullYear(), punchTime.getMonth(), 25);
-          }
-          const cycleLogs = await storage.getAttendanceByDateRange(format(cycleStart, 'yyyy-MM-dd'), format(cycleEnd, 'yyyy-MM-dd'), employee.id);
-          const cycleEarlyCount = cycleLogs.filter((l: any) => l.date !== today && (l.status === 'early_departure' || l.status === 'early_deducted')).length;
-          status = cycleEarlyCount >= 3 ? 'early_deducted' : 'early_departure';
-        }
-
-        status = recomputeStatusByHours(status, parseFloat(workHours));
-
-		  result = await storage.updateAttendance(existing.id, {
-          checkOut: punchTime,
-          checkOutLocation: deviceIdRaw || 'Manual',
-          workHours,
-          overtime: parseFloat(workHours) > 9 ? (parseFloat(workHours) - 9).toFixed(2) : "0",
-          status,
-        });
-        action = 'check_out';
-
-        try {
-          await storage.createAttendanceLog({
-            employeeId: employee.id,
-            attendanceId: existing.id,
-            type: 'check_out',
-            timestamp: punchTime,
-            location: deviceIdRaw || 'Manual',
-          });
-        } catch (e) {}
-      } else {
-        result = await storage.updateAttendance(existing.id, {
-          checkIn: punchTime,
-          checkInLocation: deviceIdRaw || 'Manual',
-          checkOut: null as any,
-          checkOutLocation: null as any,
-          checkOutLatitude: null as any,
-          checkOutLongitude: null as any,
-        });
-        action = 'check_in';
-
-        try {
-          await storage.createAttendanceLog({
-            employeeId: employee.id,
-            attendanceId: existing.id,
-            type: 'check_in',
-            timestamp: punchTime,
-            location: deviceIdRaw || 'Manual',
-          });
-        } catch (e) {}
-      }
+      } catch (e) {}
 
       console.log(`[ManualPunch] ${action}: Employee ${employee.employeeCode} (${employee.firstName}) at ${format(punchTime, 'HH:mm:ss')} by admin ${user.email}`);
 
