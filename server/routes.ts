@@ -173,10 +173,12 @@ async function applyPunchToAttendance(
 
   // Recompute late status if the check-in instant changed (and not a protected status).
   if (!protectedStatuses.includes(status)) {
-    const prevCi = existing.checkIn ? new Date(existing.checkIn).getTime() : null;
-    if (prevCi === null || newCheckIn.getTime() !== prevCi) {
-      status = await arrivalStatus(newCheckIn);
-    }
+	  
+	  status = await arrivalStatus(newCheckIn);
+    //const prevCi = existing.checkIn ? new Date(existing.checkIn).getTime() : null;
+    //if (prevCi === null || newCheckIn.getTime() !== prevCi) {
+      //status = await arrivalStatus(newCheckIn);
+    //}
   }
 
   let workHours: string | null = existing.workHours || null;
