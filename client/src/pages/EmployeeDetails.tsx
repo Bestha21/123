@@ -1,5 +1,5 @@
 import { useParams, Link, useLocation } from "wouter";
-import { useDepartments, useEmployees } from "@/hooks/use-employees";
+import { useDepartments, useEmployees,useAllEmployees } from "@/hooks/use-employees";
 import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,7 @@ export default function EmployeeDetails() {
   const [, setLocation] = useLocation();
   
   const { data: employees, isLoading: employeesLoading } = useEmployees();
+  const { data: allEmployees } = useAllEmployees();
   const { data: departments } = useDepartments();
   const { data: shiftsData } = useQuery<{ id: number; name: string; startTime: string; endTime: string }[]>({
     queryKey: ["/api/shifts"],
@@ -69,11 +70,22 @@ export default function EmployeeDetails() {
     return departments?.find(d => d.id === deptId)?.name || "Unknown";
   };
 
-  const getReportingManagerName = (managerCode: string | number | null | undefined) => {
+  //const getReportingManagerName = (managerCode: string | number | null | undefined) => {
+    //if (!managerCode) return null;
+    //const manager = employees?.find(e => e.employeeCode === String(managerCode) || String(e.id) === String(managerCode));
+    //if (!manager) return null;
+    //return `${manager.firstName} ${manager.lastName || ''}`.trim();
+  //};
+  
+    const getReportingManagerName = (managerCode: string | number | null | undefined) => {
     if (!managerCode) return null;
-    const manager = employees?.find(e => e.employeeCode === String(managerCode) || String(e.id) === String(managerCode));
-    if (!manager) return null;
-    return `${manager.firstName} ${manager.lastName || ''}`.trim();
+    // Resolve against the full company-wide list so managers in other entities
+    // still show by name; fall back to the entity-scoped list, then the raw value.
+    const pool = allEmployees ?? employees;
+    const manager = pool?.find(e => e.employeeCode === String(managerCode) || String(e.id) === String(managerCode));
+    // Fall back to the raw stored value (same as the Reports export) so the
+    // manager/HOD never shows blank when it can't be resolved to a name.
+    return manager ? `${manager.firstName} ${manager.lastName || ''}`.trim() : String(managerCode);
   };
 
   const getEmployeeDisplayName = () => {
