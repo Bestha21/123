@@ -161,7 +161,8 @@ export default function EditEmployee() {
   }, [employee]);
 
   const shiftChanged = formData.shiftId !== originalShiftId;
-    // Reporting Manager / HOD may be stored as either an employee code (e.g. "FCT/EMP/127")
+
+  // Reporting Manager / HOD may be stored as either an employee code (e.g. "FCT/EMP/127")
   // or a numeric DB id (from bulk uploads). The dropdown options use employee code as their
   // value, so resolve any stored value to the matching employee's code for display.
   const resolveManagerCode = (val: string | number | null | undefined) => {
@@ -486,9 +487,8 @@ export default function EditEmployee() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Reporting Manager</Label>
-                  //<Select value={formData.reportingManagerId?.toString() || "none"} onValueChange={(v) => updateField("reportingManagerId", v === "none" ? null : v)}>
                   <Select value={resolveManagerCode(formData.reportingManagerId)} onValueChange={(v) => updateField("reportingManagerId", v === "none" ? null : v)}>
-					<SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
                       {employees?.filter(e => e.id !== employeeId && e.employeeCode).map(e => (
@@ -734,8 +734,7 @@ export default function EditEmployee() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>HOD</Label>
-                  //<Select value={formData.hodId?.toString() || "none"} onValueChange={(v) => updateField("hodId", v === "none" ? null : v)}>
-				   <Select value={resolveManagerCode(formData.hodId)} onValueChange={(v) => updateField("hodId", v === "none" ? null : v)}>
+                  <Select value={resolveManagerCode(formData.hodId)} onValueChange={(v) => updateField("hodId", v === "none" ? null : v)}>
                     <SelectTrigger><SelectValue placeholder="Select HOD" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">None</SelectItem>
