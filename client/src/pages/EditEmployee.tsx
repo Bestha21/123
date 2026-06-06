@@ -525,6 +525,17 @@ export default function EditEmployee() {
                   </Select>
                   <p className="text-xs text-muted-foreground">Required for Gurgaon employees to use remote/hybrid login</p>
                 </div>
+				<div className="space-y-2">
+                <Label>Deputation – Check-In/Out Allowed</Label>
+                <Select value={formData.deputationCheckInAllowed ? "true" : "false"} onValueChange={(v) => updateField("deputationCheckInAllowed", v === "true")}>
+                  <SelectTrigger data-testid="select-deputationCheckInAllowed"><SelectValue placeholder="Select" /></SelectTrigger>
+                   <SelectContent>
+                   <SelectItem value="false">No (Default – Gurgaon Only)</SelectItem>
+                   <SelectItem value="true">Yes (Deputised – Check-In Enabled)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">Grant check-in/out access to employees on deputation at non-Gurgaon locations</p>
+              </div>
                 <div className="space-y-2">
                   <Label>Biometric Device ID</Label>
                   <Input value={formData.biometricDeviceId || ""} onChange={(e) => updateField("biometricDeviceId", e.target.value)} placeholder="e.g., 36 (ID from biometric device)" data-testid="input-biometricDeviceId" />

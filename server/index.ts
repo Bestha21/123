@@ -918,6 +918,14 @@ app.use((req, res, next) => {
       CREATE INDEX IF NOT EXISTS idx_on_duty_requests_status ON on_duty_requests(status);
       DO $$ BEGIN
         ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_permission TEXT DEFAULT 'office';
+		      DO $$ BEGIN
+        ALTER TABLE employees ADD COLUMN IF NOT EXISTS location_permission TEXT DEFAULT 'office';
+      EXCEPTION WHEN OTHERS THEN NULL;
+      END $$;
++     DO $$ BEGIN
++       ALTER TABLE employees ADD COLUMN IF NOT EXISTS deputation_checkin_allowed BOOLEAN DEFAULT false;
++     EXCEPTION WHEN OTHERS THEN NULL;
++     END $$;
       EXCEPTION WHEN OTHERS THEN NULL;
       END $$;
       DO $$ BEGIN

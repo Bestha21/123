@@ -94,6 +94,7 @@ function EmployeeSelfServiceClassic() {
   });
 
   const currentEmployee = employees?.find(e => e.email?.toLowerCase() === user?.email?.toLowerCase());
+  const canCheckInOut = !!currentEmployee && (/(gurgaon|gurugram)/i.test(currentEmployee.location || '') || !!(currentEmployee as any).deputationCheckInAllowed);
   const currentEntity = currentEmployee?.entityId ? entities.find(e => e.id === currentEmployee.entityId) : null;
 
   const { data: attendanceLogs } = useQuery<any[]>({
@@ -962,7 +963,7 @@ function EmployeeSelfServiceClassic() {
             </div>
           )}
         </div>
-        {currentEmployee && !currentEmployee.attendanceExempt && (
+        {currentEmployee && !currentEmployee.attendanceExempt && canCheckInOut && (
           <div className="hidden sm:flex gap-3 items-center">
             {(!todayLog || todayLog.checkOut) && (
               <Button
@@ -990,7 +991,7 @@ function EmployeeSelfServiceClassic() {
         )}
       </div>
 
-      {currentEmployee && !currentEmployee.attendanceExempt && (
+      {currentEmployee && !currentEmployee.attendanceExempt && canCheckInOut && (
         <div className="sm:hidden fixed bottom-0 left-0 right-0 z-30 bg-white border-t border-slate-200 p-3 flex items-center justify-between shadow-lg" data-testid="mobile-attendance-bar">
           <div className="flex-1 min-w-0">
             <p className="text-xs text-muted-foreground truncate">

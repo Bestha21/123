@@ -176,6 +176,7 @@ export const employees = pgTable("employees", {
   shiftEffectiveDate: text("shift_effective_date"),
   locationPermission: text("location_permission").default("office"), // office, remote, hybrid
   remoteLoginAuthorized: boolean("remote_login_authorized").default(false),
+  deputationCheckInAllowed: boolean("deputation_checkin_allowed").default(false),
   biometricDeviceId: text("biometric_device_id"),
   attendanceExempt: boolean("attendance_exempt").default(false),
   locationCode: text("location_code"),
