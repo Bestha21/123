@@ -320,11 +320,33 @@ export default function AttendancePage() {
   const displayOT = overtimeRequests || [];
 
   const lateEarlyEmployees = useMemo(() => {
-    if (!cycleStats?.employeeCycleStats) return [];
-    return Object.entries(cycleStats.employeeCycleStats)
-      .filter(([_, stats]) => stats.lateCount > 0 || stats.earlyCount > 0)
-      .sort(([_, a], [__, b]) => (b.lateCount + b.earlyCount) - (a.lateCount + a.earlyCount));
-  }, [cycleStats]);
+  if (!cycleStats?.employeeCycleStats) return [];
+  let visibleIds: Set<number> | null = null;
+  if (!isAdminUser && !isHrUser) {
+    visibleIds = new Set<number>();
+    if (currentEmployee) {
+      visibleIds.add(currentEmployee.id); // always see self
+      if (employees) {
+        employees.forEach(e => {
+          if (
+            e.status === 'active' && (
+              e.reportingManagerId === currentEmployee.employeeCode ||
+              e.hodId === currentEmployee.employeeCode
+            )
+          ) {
+            visibleIds!.add(e.id);
+          }
+        });
+      }
+    }
+  }
+  return Object.entries(cycleStats.employeeCycleStats)
+    .filter(([empId, stats]) => {
+      if (visibleIds && !visibleIds.has(Number(empId))) return false;
+      return stats.lateCount > 0 || stats.earlyCount > 0;
+    })
+    .sort(([_, a], [__, b]) => (b.lateCount + b.earlyCount) - (a.lateCount + a.earlyCount));
+}, [cycleStats, isAdminUser, isHrUser, currentEmployee, employees]);
 
   return (
     <div className="space-y-6">
