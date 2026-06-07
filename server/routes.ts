@@ -1417,12 +1417,33 @@ app.delete("/api/departments/:id", async (req, res) => {
 
       const employees = await storage.getEmployees();
       const activeEmployees = employees.filter(e => e.status === 'active');
+	  // Determine which employee IDs this requester is allowed to see in cycle stats
+		const reqUser = req.user as any;
+		const reqEmail = reqUser?.email || reqUser?.claims?.email;
+		const reqEmployee = reqEmail ? employees.find((e: any) => e.email?.toLowerCase() === reqEmail.toLowerCase()) : null;
+		const reqRoles = (reqEmployee?.accessRole || 'employee').split(',').map((r: string) => r.trim());
+		const reqIsAdmin = reqRoles.includes('admin');
+		const reqIsHr = reqRoles.includes('hr') || reqRoles.includes('hr_manager');
 
+		let allowedEmpIds: Set<number> | null = null;
+		if (!reqIsAdmin && !reqIsHr && reqEmployee) {
+		  allowedEmpIds = new Set<number>();
+		  allowedEmpIds.add(reqEmployee.id);
+		  for (const emp of activeEmployees) {
+			if (
+			  emp.reportingManagerId === reqEmployee.employeeCode ||
+			  (emp as any).hodId === reqEmployee.employeeCode
+			) {
+			  allowedEmpIds.add(emp.id);
+			}
+		  }
+		}
       const presentToday = todayLogs.filter(l => ['present', 'late', 'late_deducted', 'early_departure', 'early_deducted'].includes(l.status || '')).length;
       const lateToday = todayLogs.filter(l => ['late', 'late_deducted', 'half_day'].includes(l.status || '')).length;
 
       const employeeCycleStats: Record<number, { lateCount: number; earlyCount: number; lateDeducted: number; earlyDeducted: number; name: string; code: string; department: string }> = {};
       for (const emp of activeEmployees) {
+		  if (allowedEmpIds && !allowedEmpIds.has(emp.id)) continue;
         const empLogs = cycleLogs.filter(l => l.employeeId === emp.id);
         const lateCount = empLogs.filter(l => l.status === 'late' || l.status === 'late_deducted').length;
         const earlyCount = empLogs.filter(l => l.status === 'early_departure' || l.status === 'early_deducted').length;
