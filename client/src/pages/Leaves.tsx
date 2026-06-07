@@ -1267,9 +1267,10 @@ export default function Leaves() {
                               <SelectItem value="4.5">4.5 Hours (Half Day)</SelectItem>
                               <SelectItem value="5">5 Hours (Half Day)</SelectItem>
                               <SelectItem value="5.5">5.5 Hours (Half Day)</SelectItem>
-                              <SelectItem value="6">6 Hours (Full Day)</SelectItem>
-                              <SelectItem value="7">7 Hours (Full Day)</SelectItem>
-                              <SelectItem value="8">8 Hours (Full Day)</SelectItem>
+                              <SelectItem value="6">6 Hours (Half Day)</SelectItem>
+                              <SelectItem value="7">7 Hours (Half Day)</SelectItem>
+                              <SelectItem value="8">8 Hours (Half Day)</SelectItem>
+							  <SelectItem value="8.5">8.5 Hours (Full Day)</SelectItem>
                               <SelectItem value="9">9+ Hours (Full Day)</SelectItem>
                             </SelectContent>
                           </Select>
@@ -1352,7 +1353,7 @@ export default function Leaves() {
                       <p className="font-medium text-foreground mb-1">Comp-Off Policy</p>
                       <ul className="list-disc pl-4 space-y-1">
                         <li>Comp-Off is earned when you work on a weekend (Saturday/Sunday) or a company holiday.</li>
-                        <li>4.5+ hours of work earns 0.5 day; 6+ hours earns 1 full day.</li>
+                        <li>4.5+ hours of work earns 0.5 day; 8.5+ hours earns 1 full day.</li>
                         <li>Request must be raised and approved by your reporting manager.</li>
                         <li>Approved comp-off must be availed within <strong>60 days</strong> from the work date, or it expires automatically.</li>
                         <li>Comp-Off balance is reflected in your leave balance under "CO" leave type.</li>
