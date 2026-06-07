@@ -720,6 +720,16 @@ export default function Reports() {
     if (isNaN(d.getTime())) return String(val);
     return `${String(d.getDate()).padStart(2,'0')}-${MONTHS_SHORT[d.getMonth()]}-${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   };
+  const fmtTime = (val: any): string => {
+  if (!val) return '';
+  const d = new Date(String(val));
+  if (isNaN(d.getTime())) return String(val);
+  const h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${String(h12).padStart(2,'0')}:${m} ${ampm}`;
+};
   const fileDate = () => { const n = new Date(); return `${String(n.getDate()).padStart(2,'0')}-${MONTHS_SHORT[n.getMonth()]}-${n.getFullYear()}`; };
   const num = (v: any) => Number(v) || 0;
   const empName = (empId: number) => { const e = employees?.find(x => x.id === empId); return e ? `${e.firstName} ${e.lastName || ''}`.trim() : ''; };
@@ -1220,8 +1230,8 @@ export default function Reports() {
         });
         const data = att.map(a => {
           const ci = new Date(a.checkIn);
-          const ciTime = fmtDateTime(a.checkIn);
-          const coTime = a.checkOut ? fmtDateTime(a.checkOut) : '';
+          const ciTime = fmtTime(a.checkIn);
+          const coTime = a.checkOut ? fmtTime(a.checkOut) : '';
           const isLate = ci.getHours() > 9 || (ci.getHours() === 9 && ci.getMinutes() > 30);
           const isEarly = a.checkOut ? (() => { const co = new Date(a.checkOut); return co.getHours() < 18 || (co.getHours() === 18 && co.getMinutes() < 30); })() : false;
           return {
