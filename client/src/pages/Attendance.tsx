@@ -96,6 +96,9 @@ function getStatusBadge(status: string | null) {
 
 export default function AttendancePage() {
   const { user } = useAuth();
+  const { data: meData } = useQuery<{ accessRole: string; employeeId?: number; employeeFound: boolean }>({
+  queryKey: ["/api/me"],
+});
   const { toast } = useToast();
   const [calendarMonth, setCalendarMonth] = useState(new Date());
 
@@ -302,7 +305,8 @@ export default function AttendancePage() {
     onError: (err: Error) => toast({ title: "Error", description: err.message, variant: "destructive" }),
   });
 
-  const userRoles = (currentEmployee?.accessRole || "employee").split(",").map((r: string) => r.trim());
+  //const userRoles = (currentEmployee?.accessRole || "employee").split(",").map((r: string) => r.trim());
+  const userRoles = (meData?.accessRole || currentEmployee?.accessRole || "employee").split(",").map((r: string) => r.trim());
   const isAdminUser = userRoles.includes("admin");
   const isHrUser = userRoles.includes("hr") || userRoles.includes("hr_manager");
 
