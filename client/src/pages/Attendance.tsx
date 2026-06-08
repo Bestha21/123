@@ -158,7 +158,8 @@ export default function AttendancePage() {
   });
 
   const currentEmployee = employees?.find(e => e.email?.toLowerCase() === user?.email?.toLowerCase());
-  const canCheckInOut = !!currentEmployee && (/(gurgaon|gurugram)/i.test(currentEmployee.location || '') || !!(currentEmployee as any).deputationCheckInAllowed);
+  const canCheckInOut = !!currentEmployee && (/(gurgaon|gurugram)/i.test(currentEmployee.location || '') || !!(currentEmployee as any).remoteLoginAuthorized);
+  //const canCheckInOut = !!currentEmployee && (/(gurgaon|gurugram)/i.test(currentEmployee.location || '') || !!(currentEmployee as any).deputationCheckInAllowed);
   const todayDate = new Date().toISOString().split('T')[0];
   const todayLog = attendanceLogs?.find(l => 
     l.employeeId === currentEmployee?.id && l.date === todayDate

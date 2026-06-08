@@ -94,7 +94,8 @@ function EmployeeSelfServiceClassic() {
   });
 
   const currentEmployee = employees?.find(e => e.email?.toLowerCase() === user?.email?.toLowerCase());
-  const canCheckInOut = !!currentEmployee && (/(gurgaon|gurugram)/i.test(currentEmployee.location || '') || !!(currentEmployee as any).deputationCheckInAllowed);
+  //const canCheckInOut = !!currentEmployee && (/(gurgaon|gurugram)/i.test(currentEmployee.location || '') || !!(currentEmployee as any).deputationCheckInAllowed);
+  const canCheckInOut = !!currentEmployee && (/(gurgaon|gurugram)/i.test(currentEmployee.location || '') || !!(currentEmployee as any).remoteLoginAuthorized);
   const currentEntity = currentEmployee?.entityId ? entities.find(e => e.id === currentEmployee.entityId) : null;
 
   const { data: attendanceLogs } = useQuery<any[]>({
