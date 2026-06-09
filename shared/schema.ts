@@ -176,9 +176,9 @@ export const employees = pgTable("employees", {
   shiftEffectiveDate: text("shift_effective_date"),
   locationPermission: text("location_permission").default("office"), // office, remote, hybrid
   remoteLoginAuthorized: boolean("remote_login_authorized").default(false),
-  deputationCheckInAllowed: boolean("deputation_checkin_allowed").default(false),
   biometricDeviceId: text("biometric_device_id"),
   attendanceExempt: boolean("attendance_exempt").default(false),
+  compOffEligible: boolean("comp_off_eligible").default(false),
   locationCode: text("location_code"),
   accessRole: text("access_role").default("employee"), // employee, hr_manager, leadership, manager, asset_team, payroll_team, project_team, onboarding_team, pms_team, lms_team, admin
   onboardingStatus: text("onboarding_status").default("pending"), // pending, invited, in_progress, completed
