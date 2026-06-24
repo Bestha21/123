@@ -85,6 +85,8 @@ function getStatusBadge(status: string | null) {
       return <Badge className="bg-blue-100 text-blue-700" data-testid="badge-leave">On Leave</Badge>;
     case 'early':
       return <Badge className="bg-orange-100 text-orange-700" data-testid="badge-early-status">Early</Badge>;
+    case 'regularized':
+      return <Badge className="bg-teal-100 text-teal-700" data-testid="badge-regularized">PR (Regularized)</Badge>;
     case 'missed_punch':
       return <Badge className="bg-red-100 text-red-700" data-testid="badge-missed-punch">Missed Punch</Badge>;
     case 'holiday':
@@ -363,7 +365,7 @@ export default function AttendancePage() {
           </p>
         </div>
         <div className="flex gap-3">
-          {currentEmployee && !currentEmployee.attendanceExempt && (
+          {currentEmployee && !currentEmployee.attendanceExempt && canCheckInOut && (
             <>
               {(!todayLog || todayLog.checkOut) && (
                 <Button 
@@ -430,6 +432,7 @@ export default function AttendancePage() {
           <TabsTrigger value="regularize" data-testid="tab-regularize">Regularization</TabsTrigger>
           <TabsTrigger value="onduty" data-testid="tab-onduty">On Duty</TabsTrigger>
           {isAdminUser && <TabsTrigger value="policy" data-testid="tab-policy">Policy</TabsTrigger>}
+          {(isAdminUser || isHrUser) && <TabsTrigger value="bulkupload" data-testid="tab-bulkupload">Bulk Upload</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="log">
@@ -1095,6 +1098,8 @@ export default function AttendancePage() {
             isAdmin={isAdminUser || isHrUser} 
             currentEmployee={currentEmployee}
             attendanceLogs={attendanceLogs || []}
+            employees={employees || []}
+            isPrivileged={hasReportees}
           />
         </TabsContent>
 
@@ -1102,8 +1107,16 @@ export default function AttendancePage() {
           <OnDutyTab 
             isAdmin={isAdminUser || isHrUser} 
             currentEmployee={currentEmployee}
+            isPrivileged={hasReportees}
+            employees={employees || []}
           />
         </TabsContent>
+
+        {(isAdminUser || isHrUser) && (
+          <TabsContent value="bulkupload">
+            <AttendanceBulkUploadTab />
+          </TabsContent>
+        )}
       </Tabs>
     </div>
   );
@@ -1230,15 +1243,32 @@ function AttendanceLogTab({ currentEmployee, employees, isAdmin, shiftsData, all
         statusLabel = dayOfWeek === 0 ? 'Sunday - Weekly Off' : '2nd/4th Sat - Weekly Off';
         statusColor = 'bg-slate-100 text-slate-500';
       } else if (leave) {
-        dayStatus = 'leave';
-        statusLabel = leave.leaveType ? `${leave.leaveType} Leave` : 'On Leave';
-        statusColor = 'bg-blue-100 text-blue-700';
+        const isHalfDayLeave = parseFloat(String(leave.days || '1')) === 0.5;
+        const hasCheckIn = log && log.checkIn;
+        if (isHalfDayLeave && !hasCheckIn) {
+          dayStatus = 'leave';
+          statusLabel = `HD(${leave.leaveType}) + HLWP`;
+          statusColor = 'bg-orange-100 text-orange-700';
+        } else if (isHalfDayLeave) {
+          dayStatus = 'leave';
+          statusLabel = `HD(${leave.leaveType})`;
+          statusColor = 'bg-blue-100 text-blue-700';
+        } else {
+          dayStatus = 'leave';
+          statusLabel = leave.leaveType ? `${leave.leaveType} Leave` : 'On Leave';
+          statusColor = 'bg-blue-100 text-blue-700';
+        }
       } else if (log) {
         if (log.checkIn && !log.checkOut && !isToday && !isFuture) {
           dayStatus = 'missedpunch';
           statusLabel = 'Missed Punch';
           statusColor = 'bg-red-100 text-red-700';
           arrivalNote = 'Missed Punch (LOP)';
+        } else if (log.status === 'regularized') {
+          dayStatus = 'present';
+          statusLabel = 'Present (Regularized)';
+          statusColor = 'bg-teal-100 text-teal-700';
+          arrivalNote = 'Regularized';
         } else if (log.status === 'present') {
           dayStatus = 'present';
           statusLabel = 'Present';
@@ -1568,7 +1598,7 @@ function AttendanceLogTab({ currentEmployee, employees, isAdmin, shiftsData, all
                         <td className="py-3 px-4">
                           {isSpecialDay ? (
                             <span className="text-xs text-slate-400">-</span>
-                          ) : d.log?.workHours ? (
+                          ) : d.log?.workHours && d.log?.checkOut ? (
                             <span className="text-sm font-semibold text-slate-800">{formatHours(d.log.workHours)}</span>
                           ) : (
                             <span className="text-xs text-slate-400">-</span>
@@ -1587,6 +1617,7 @@ function AttendanceLogTab({ currentEmployee, employees, isAdmin, shiftsData, all
                           {d.arrivalNote && !isSpecialDay ? (
                             <span className={`text-xs font-medium ${
                               d.arrivalNote === 'On Time' ? 'text-green-600' :
+                              d.arrivalNote === 'Regularized' ? 'text-teal-600' :
                               d.arrivalNote.includes('Missed Punch') || d.arrivalNote.includes('LOP') ? 'text-red-600' :
                               'text-orange-600'
                             }`}>
@@ -1734,8 +1765,9 @@ function getCodeColor(code: string): string {
   if (code === 'A') return 'bg-red-100 text-red-700';
   if (code === 'LWP') return 'bg-red-50 text-red-600';
   if (code === 'PMS') return 'bg-orange-100 text-orange-700';
-  if (code === '½P') return 'bg-yellow-100 text-yellow-700';
-  if (code.startsWith('½')) return 'bg-blue-50 text-blue-700';
+  if (code === 'HD(P)') return 'bg-yellow-100 text-yellow-700';
+  if (code.includes('/HLWP')) return 'bg-orange-100 text-orange-700';
+  if (code.startsWith('HD(')) return 'bg-blue-50 text-blue-700';
   if (['CL', 'SL', 'EL', 'PL', 'ML', 'CO', 'BL', 'OD'].includes(code)) return 'bg-blue-100 text-blue-700';
   return 'bg-slate-50 text-slate-600';
 }
@@ -1789,7 +1821,7 @@ function AttendanceSheetTab({ isAdmin, currentEmployee, employees }: { isAdmin: 
   const exportCSV = () => {
     if (!sheetData) return;
     const dates = sheetData.dates;
-    const headers = ["Emp Code", "Employee Name", "Dept", ...dates.map(d => format(new Date(d + 'T00:00:00'), 'dd')), "P", "A", "½D", "Lv", "H", "WO", "LWP"];
+    const headers = ["Emp Code", "Employee Name", "Dept", ...dates.map(d => format(new Date(d + 'T00:00:00'), 'dd')), "P", "A", "HD", "Lv", "H", "WO", "LWP"];
     const rows = filteredSheet.map(emp => [
       emp.employeeCode,
       emp.employeeName,
@@ -1858,7 +1890,7 @@ function AttendanceSheetTab({ isAdmin, currentEmployee, employees }: { isAdmin: 
         {[
           { code: 'P', label: 'Present' }, { code: 'A', label: 'Absent' }, { code: 'H', label: 'Holiday' },
           { code: 'WH', label: 'Worked Holiday' }, { code: 'WO', label: 'Weekly Off' }, { code: 'WOW', label: 'Worked Weekend' },
-          { code: 'PMS', label: 'Missing Swipe' }, { code: '½P', label: 'Half Day' }, { code: 'LWP', label: 'Leave W/O Pay' },
+          { code: 'PMS', label: 'Missing Swipe' }, { code: 'HD(P)', label: 'Half Day' }, { code: 'LWP', label: 'Leave W/O Pay' },
           { code: 'CL', label: 'Casual Leave' }, { code: 'SL', label: 'Sick Leave' }, { code: 'EL', label: 'Earned Leave' },
           { code: 'CO', label: 'Comp Off' },
         ].map(item => (
@@ -1890,7 +1922,7 @@ function AttendanceSheetTab({ isAdmin, currentEmployee, employees }: { isAdmin: 
                     })}
                     <th className="px-1 py-1.5 text-center font-medium min-w-[28px] bg-green-50 border-r">P</th>
                     <th className="px-1 py-1.5 text-center font-medium min-w-[28px] bg-red-50 border-r">A</th>
-                    <th className="px-1 py-1.5 text-center font-medium min-w-[28px] bg-yellow-50 border-r">½D</th>
+                    <th className="px-1 py-1.5 text-center font-medium min-w-[28px] bg-yellow-50 border-r">HD</th>
                     <th className="px-1 py-1.5 text-center font-medium min-w-[28px] bg-blue-50 border-r">Lv</th>
                     <th className="px-1 py-1.5 text-center font-medium min-w-[28px] bg-red-50">LWP</th>
                   </tr>
@@ -1929,10 +1961,12 @@ function AttendanceSheetTab({ isAdmin, currentEmployee, employees }: { isAdmin: 
   );
 }
 
-function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: { 
+function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs, employees, isPrivileged }: { 
   isAdmin: boolean; 
   currentEmployee: Employee | undefined;
   attendanceLogs: AttendanceType[];
+  employees: Employee[];
+  isPrivileged: boolean;
 }) {
   const { toast } = useToast();
   const [regReason, setRegReason] = useState("");
@@ -1972,16 +2006,41 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
 
   const [absentDate, setAbsentDate] = useState("");
   const [absentReason, setAbsentReason] = useState("");
+  const [regType, setRegType] = useState<"absent_day" | "late_login">("absent_day");
+
+  const selectedDateLog = absentDate
+    ? attendanceLogs.find(a => a.employeeId === currentEmployee?.id && a.date === absentDate)
+    : null;
+
+  const selectedCheckInDisplay = selectedDateLog?.checkIn
+    ? (() => {
+        const ci = new Date(selectedDateLog.checkIn as any);
+        return `${String(ci.getHours()).padStart(2, '0')}:${String(ci.getMinutes()).padStart(2, '0')}`;
+      })()
+    : null;
+
+  const isLateEnough = selectedDateLog?.checkIn
+    ? (() => {
+        const ci = new Date(selectedDateLog.checkIn as any);
+        return ci.getHours() * 60 + ci.getMinutes() > 9 * 60 + 30;
+      })()
+    : false;
+
   const submitAbsentRegMutation = useMutation({
     mutationFn: async () => {
-      return apiRequest("POST", "/api/attendance/regularize", { date: absentDate, reason: absentReason });
+      const payload: any = { date: absentDate, reason: absentReason, regType };
+      if (regType === "late_login" && selectedDateLog) {
+        payload.attendanceId = selectedDateLog.id;
+      }
+      return apiRequest("POST", "/api/attendance/regularize", payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/attendance"] });
       queryClient.invalidateQueries({ queryKey: ["/api/attendance/pending-regularizations"] });
-      toast({ title: "Regularization submitted for absent day" });
+      toast({ title: regType === "late_login" ? "Late login regularization submitted" : "Regularization submitted for absent day" });
       setAbsentDate("");
       setAbsentReason("");
+      setRegType("absent_day");
     },
     onError: (err: Error) => {
       toast({ title: "Failed to submit", description: err.message, variant: "destructive" });
@@ -2115,24 +2174,71 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
       {currentEmployee && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-base">Request Regularization for an Absent Day</CardTitle>
-            <p className="text-xs text-muted-foreground">Use this if a day is missing from your attendance list above (e.g. you were absent or didn't swipe at all).</p>
+            <CardTitle className="text-base">Request Regularization</CardTitle>
+            <p className="text-xs text-muted-foreground">
+              {regType === "late_login"
+                ? "Use this if you logged in more than 30 minutes late (after 9:30 AM) and need it regularized."
+                : "Use this if a day is missing from your attendance list above (e.g. you were absent or didn't swipe at all)."}
+            </p>
           </CardHeader>
           <CardContent>
             <div className="flex gap-2 items-end flex-wrap">
               <div>
+                <label className="text-xs text-muted-foreground block mb-1">Type</label>
+                <Select value={regType} onValueChange={v => { setRegType(v as any); setAbsentDate(""); setAbsentReason(""); }}>
+                  <SelectTrigger className="h-8 text-sm w-44">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="absent_day">Absent Day</SelectItem>
+                    <SelectItem value="late_login">Late Login</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
                 <label className="text-xs text-muted-foreground block mb-1">Date</label>
                 <Input type="date" value={absentDate} onChange={e => setAbsentDate(e.target.value)} className="h-8 text-sm w-44" data-testid="input-absent-date" />
               </div>
+              {regType === "late_login" && absentDate && (
+                <div>
+                  <label className="text-xs text-muted-foreground block mb-1">Detected Check-In</label>
+                  {selectedCheckInDisplay ? (
+                    <div className={`h-8 flex items-center px-3 rounded-md border text-sm font-medium ${isLateEnough ? "border-orange-300 bg-orange-50 text-orange-700" : "border-red-300 bg-red-50 text-red-700"}`}>
+                      {selectedCheckInDisplay}
+                      {!isLateEnough && <span className="ml-2 text-xs font-normal">(not late enough)</span>}
+                    </div>
+                  ) : (
+                    <div className="h-8 flex items-center px-3 rounded-md border border-red-300 bg-red-50 text-red-700 text-sm">
+                      No record found
+                    </div>
+                  )}
+                </div>
+              )}
               <div className="flex-1 min-w-[200px]">
                 <label className="text-xs text-muted-foreground block mb-1">Reason</label>
-                <Input value={absentReason} onChange={e => setAbsentReason(e.target.value)} placeholder="Why was this day missed?" className="h-8 text-sm" data-testid="input-absent-reason" />
+                <Input value={absentReason} onChange={e => setAbsentReason(e.target.value)}
+                  placeholder={regType === "late_login" ? "Reason for late login..." : "Why was this day missed?"}
+                  className="h-8 text-sm" data-testid="input-absent-reason" />
               </div>
-              <Button size="sm" className="h-8" disabled={!absentDate || !absentReason.trim() || submitAbsentRegMutation.isPending}
+              <Button size="sm" className="h-8"
+                disabled={
+                  !absentDate || !absentReason.trim() || submitAbsentRegMutation.isPending ||
+                  (regType === "late_login" && (!selectedCheckInDisplay || !isLateEnough))
+                }
                 onClick={() => submitAbsentRegMutation.mutate()}
                 data-testid="button-submit-absent-reg"
               >Submit Request</Button>
             </div>
+            {regType === "late_login" && absentDate && selectedCheckInDisplay && !isLateEnough && (
+              <p className="text-xs text-red-600 mt-2">
+                Check-in at {selectedCheckInDisplay} is within 30 minutes of 9:00 AM — regularization is only allowed for late logins after 9:30 AM.
+              </p>
+            )}
+            {regType === "late_login" && absentDate && !selectedCheckInDisplay && (
+              <p className="text-xs text-red-600 mt-2">
+                No attendance record found for this date. Late login regularization requires an existing check-in record.
+              </p>
+            )}
           </CardContent>
         </Card>
       )}
@@ -2188,11 +2294,122 @@ function RegularizationTab({ isAdmin, currentEmployee, attendanceLogs }: {
           </CardContent>
         </Card>
       )}
+      {isPrivileged && (() => {
+        const teamIds = isAdmin
+          ? null
+          : new Set(employees.filter(e =>
+              e.reportingManagerId === currentEmployee?.employeeCode ||
+              e.hodId === currentEmployee?.employeeCode
+            ).map(e => e.id));
+        const allRegHistory = attendanceLogs
+          .filter(a => a.employeeId !== currentEmployee?.id && !!a.regularizationStatus && (teamIds === null || teamIds.has(a.employeeId)))
+          .sort((a, b) => b.date.localeCompare(a.date));
+        if (allRegHistory.length === 0) return null;
+        const empMap = Object.fromEntries(employees.map(e => [e.id, e]));
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">All Employees Regularization History</CardTitle>
+              <p className="text-xs text-muted-foreground">Regularization requests from all reportees / employees you manage.</p>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Check In</TableHead>
+                    <TableHead>Check Out</TableHead>
+                    <TableHead>Hours</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allRegHistory.map(entry => {
+                    const emp = empMap[entry.employeeId];
+                    return (
+                      <TableRow key={entry.id}>
+                        <TableCell>
+                          <div className="text-sm font-medium">{emp ? `${emp.firstName || ''} ${emp.lastName || ''}`.trim() : `ID:${entry.employeeId}`}</div>
+                          <div className="text-xs text-muted-foreground">{emp?.employeeCode || ''}</div>
+                        </TableCell>
+                        <TableCell className="text-sm font-medium">{entry.date}</TableCell>
+                        <TableCell className="text-sm">{entry.checkIn ? format(new Date(entry.checkIn), 'hh:mm a') : '-'}</TableCell>
+                        <TableCell className="text-sm">{entry.checkOut ? format(new Date(entry.checkOut), 'hh:mm a') : '-'}</TableCell>
+                        <TableCell className="text-sm">{entry.workHours ? parseFloat(String(entry.workHours)).toFixed(2) + ' hrs' : '-'}</TableCell>
+                        <TableCell className="text-sm max-w-[180px] truncate" title={entry.regularizationReason || ''}>{entry.regularizationReason || '-'}</TableCell>
+                        <TableCell>
+                          {entry.regularizationStatus === 'approved' ? <Badge className="bg-green-100 text-green-700">Approved</Badge>
+                          : entry.regularizationStatus === 'pending' ? <Badge className="bg-yellow-100 text-yellow-700">Pending</Badge>
+                          : entry.regularizationStatus === 'rejected' ? <Badge className="bg-red-100 text-red-700">Rejected</Badge>
+                          : <Badge className="bg-slate-200 text-slate-600">Cancelled</Badge>}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        );
+      })()}
+      {currentEmployee && (() => {
+        const myRegHistory = attendanceLogs
+          .filter(a => a.employeeId === currentEmployee.id && !!a.regularizationStatus)
+          .sort((a, b) => b.date.localeCompare(a.date));
+        if (myRegHistory.length === 0) return null;
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">My Regularization History</CardTitle>
+              <p className="text-xs text-muted-foreground">All your regularization requests — pending, approved, rejected or cancelled.</p>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Check In</TableHead>
+                    <TableHead>Check Out</TableHead>
+                    <TableHead>Hours</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {myRegHistory.map(entry => (
+                    <TableRow key={entry.id}>
+                      <TableCell className="text-sm font-medium">{entry.date}</TableCell>
+                      <TableCell className="text-sm">{entry.checkIn ? format(new Date(entry.checkIn), 'hh:mm a') : '-'}</TableCell>
+                      <TableCell className="text-sm">{entry.checkOut ? format(new Date(entry.checkOut), 'hh:mm a') : '-'}</TableCell>
+                      <TableCell className="text-sm">{entry.workHours ? parseFloat(String(entry.workHours)).toFixed(2) + ' hrs' : '-'}</TableCell>
+                      <TableCell className="text-sm max-w-[200px] truncate" title={entry.regularizationReason || ''}>
+                        {entry.regularizationReason || '-'}
+                      </TableCell>
+                      <TableCell>
+                        {entry.regularizationStatus === 'approved' ? (
+                          <Badge className="bg-green-100 text-green-700">Approved</Badge>
+                        ) : entry.regularizationStatus === 'pending' ? (
+                          <Badge className="bg-yellow-100 text-yellow-700">Pending</Badge>
+                        ) : entry.regularizationStatus === 'rejected' ? (
+                          <Badge className="bg-red-100 text-red-700">Rejected</Badge>
+                        ) : entry.regularizationStatus === 'cancelled' ? (
+                          <Badge className="bg-slate-200 text-slate-600">Cancelled</Badge>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        );
+      })()}
     </div>
   );
 }
-
-function OnDutyTab({ isAdmin, currentEmployee }: { isAdmin: boolean; currentEmployee: Employee | undefined }) {
+function OnDutyTab({ isAdmin, currentEmployee, isPrivileged, employees }: { isAdmin: boolean; currentEmployee: Employee | undefined; isPrivileged: boolean; employees: Employee[] }) {
   const { toast } = useToast();
   const [showForm, setShowForm] = useState(false);
   const [odDate, setOdDate] = useState("");
@@ -2217,6 +2434,15 @@ function OnDutyTab({ isAdmin, currentEmployee }: { isAdmin: boolean; currentEmpl
       setOdDate(""); setOdStartDate(""); setOdEndDate(""); setOdReason(""); setOdLocation(""); setOdType("full_day"); setOdFromTime(""); setOdToTime("");
     },
     onError: (err: Error) => toast({ title: "Failed", description: err.message, variant: "destructive" }),
+  });
+
+  const cancelOdMutation = useMutation({
+    mutationFn: async (id) => apiRequest("PATCH", `/api/on-duty-requests/${id}/cancel`, {}),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/on-duty-requests"] });
+      toast({ title: "OD request cancelled" });
+    },
+    onError: (err) => toast({ title: "Failed to cancel", description: err.message, variant: "destructive" }),
   });
 
   const level1Mutation = useMutation({
@@ -2333,6 +2559,7 @@ function OnDutyTab({ isAdmin, currentEmployee }: { isAdmin: boolean; currentEmpl
                     <TableHead>Level 1</TableHead>
                     <TableHead>Level 2</TableHead>
                     <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2353,9 +2580,17 @@ function OnDutyTab({ isAdmin, currentEmployee }: { isAdmin: boolean; currentEmpl
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <Badge className={r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}>
-                          {r.status === 'approved' ? 'Approved' : r.status === 'rejected' ? 'Rejected' : 'Pending'}
+                        <Badge className={r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : r.status === 'cancelled' ? 'bg-slate-100 text-slate-700' : 'bg-yellow-100 text-yellow-700'}>
+                          {r.status === 'approved' ? 'Approved' : r.status === 'rejected' ? 'Rejected' : r.status === 'cancelled' ? 'Cancelled' : 'Pending'}
                         </Badge>
+                      </TableCell>
+                      <TableCell>
+                        {r.status === 'pending' && (
+                          <button style={{fontSize:'12px',padding:'2px 8px',border:'1px solid #fca5a5',borderRadius:'4px',color:'#dc2626',background:'white',cursor:'pointer'}}
+                            onClick={() => { if (confirm('Cancel this OD request?')) cancelOdMutation.mutate(r.id); }}>
+                            Cancel
+                          </button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -2468,6 +2703,59 @@ function OnDutyTab({ isAdmin, currentEmployee }: { isAdmin: boolean; currentEmpl
         </Card>
       )}
 
+      {isPrivileged && (() => {
+        const odTeamIds = isAdmin
+          ? null
+          : new Set(employees.filter(e =>
+              e.reportingManagerId === currentEmployee?.employeeCode ||
+              e.hodId === currentEmployee?.employeeCode
+            ).map(e => e.id));
+        const allOdHistory = (odRequests || [])
+          .filter((r: any) => r.employeeId !== currentEmployee?.id && (odTeamIds === null || odTeamIds.has(r.employeeId)))
+          .sort((a: any, b: any) => (b.startDate || b.date || '').localeCompare(a.startDate || a.date || ''));
+        if (allOdHistory.length === 0) return null;
+        return (
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">All Employees OD History</CardTitle>
+              <p className="text-xs text-muted-foreground">On Duty requests from all reportees / employees you manage.</p>
+            </CardHeader>
+            <CardContent>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Employee</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Reason</TableHead>
+                    <TableHead>L1</TableHead>
+                    <TableHead>L2</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {allOdHistory.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell>
+                        <div className="text-sm font-medium">{r.employeeName}</div>
+                        <div className="text-xs text-muted-foreground">{r.employeeCode}</div>
+                      </TableCell>
+                      <TableCell className="text-sm">{r.startDate || r.date}{r.endDate && r.endDate !== r.startDate ? ` → ${r.endDate}` : ''}</TableCell>
+                      <TableCell className="text-sm capitalize">{(r.odType || 'full_day').replace('_', ' ')}</TableCell>
+                      <TableCell className="text-sm">{r.location || '-'}</TableCell>
+                      <TableCell className="text-sm max-w-[150px] truncate" title={r.reason}>{r.reason}</TableCell>
+                      <TableCell><Badge className={r.level1Status === 'approved' ? 'bg-green-100 text-green-700' : r.level1Status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}>{r.level1Status === 'approved' ? 'Approved' : r.level1Status === 'rejected' ? 'Rejected' : 'Pending'}</Badge></TableCell>
+                      <TableCell><Badge className={r.level2Status === 'approved' ? 'bg-green-100 text-green-700' : r.level2Status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}>{r.level2Status === 'approved' ? 'Approved' : r.level2Status === 'rejected' ? 'Rejected' : 'Pending'}</Badge></TableCell>
+                      <TableCell><Badge className={r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : r.status === 'cancelled' ? 'bg-slate-100 text-slate-700' : 'bg-yellow-100 text-yellow-700'}>{r.status === 'approved' ? 'Approved' : r.status === 'rejected' ? 'Rejected' : r.status === 'cancelled' ? 'Cancelled' : 'Pending'}</Badge></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
+        );
+      })()}
       <Card>
         <CardHeader>
           <CardTitle className="text-base flex items-center gap-2"><Info className="w-4 h-4" />On Duty Policy</CardTitle>
@@ -2485,6 +2773,131 @@ function OnDutyTab({ isAdmin, currentEmployee }: { isAdmin: boolean; currentEmpl
             <li>Location and purpose must be clearly mentioned.</li>
             <li>Both levels of approval are mandatory for the OD to be effective.</li>
           </ul>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+function AttendanceBulkUploadTab() {
+  const { toast } = useToast();
+  const [rows, setRows] = useState<any[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [results, setResults] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  function downloadTemplate() {
+    const csv = "employee_code,date,check_in,check_out,status,notes\nEMP001,2026-06-01,09:30,18:30,present,\nEMP002,2026-06-02,,,absent,";
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "attendance_bulk_upload_template.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function parseCSV(text: string) {
+    const lines = text.trim().split("\n").filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/\s+/g, '_'));
+    return lines.slice(1).map(line => {
+      const vals = line.split(",").map(v => v.trim());
+      const obj: any = {};
+      headers.forEach((h, i) => { obj[h] = vals[i] || ""; });
+      return { employeeCode: obj.employee_code, date: obj.date, checkIn: obj.check_in, checkOut: obj.check_out, status: obj.status, notes: obj.notes };
+    }).filter(r => r.employeeCode && r.date);
+  }
+
+  function handleFile(e: any) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name); setResults(null);
+    const reader = new FileReader();
+    reader.onload = (ev: any) => { setRows(parseCSV(ev.target?.result as string)); };
+    reader.readAsText(file);
+  }
+
+  async function handleSubmit() {
+    if (!rows.length) return;
+    setLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/attendance/bulk-upload", { rows });
+      const data = await res.json();
+      setResults(data.results);
+      toast({ title: `Done: ${data.success} succeeded, ${data.errors} failed` });
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Attendance Bulk Upload</CardTitle>
+          <p className="text-xs text-muted-foreground">Upload a CSV to create or update attendance records. Check-in/out in IST 24h (HH:MM). Existing records for same employee+date are updated.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={downloadTemplate}>Download CSV Template</Button>
+            <span className="text-xs text-muted-foreground">Columns: employee_code, date, check_in, check_out, status, notes</span>
+          </div>
+          <div className="text-xs text-muted-foreground"><strong>Status values:</strong> present · absent · half_day · on_duty · leave · weekly_off · holiday</div>
+          <div className="flex items-center gap-3">
+            <label className="cursor-pointer">
+              <input type="file" accept=".csv" className="hidden" onChange={handleFile} />
+              <span className="inline-flex items-center gap-2 px-3 py-2 rounded border border-input bg-background text-sm hover:bg-accent cursor-pointer">Choose CSV File</span>
+            </label>
+            {fileName && <span className="text-sm text-muted-foreground">{fileName} — {rows.length} row(s)</span>}
+          </div>
+          {rows.length > 0 && !results && (
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Preview ({rows.length} rows)</p>
+              <div className="overflow-x-auto rounded border">
+                <Table>
+                  <TableHeader><TableRow><TableHead>Emp Code</TableHead><TableHead>Date</TableHead><TableHead>Check In</TableHead><TableHead>Check Out</TableHead><TableHead>Status</TableHead><TableHead>Notes</TableHead></TableRow></TableHeader>
+                  <TableBody>
+                    {rows.slice(0, 20).map((r, i) => (
+                      <TableRow key={i}>
+                        <TableCell className="text-sm font-medium">{r.employeeCode}</TableCell>
+                        <TableCell className="text-sm">{r.date}</TableCell>
+                        <TableCell className="text-sm">{r.checkIn || '-'}</TableCell>
+                        <TableCell className="text-sm">{r.checkOut || '-'}</TableCell>
+                        <TableCell className="text-sm">{r.status || '-'}</TableCell>
+                        <TableCell className="text-sm">{r.notes || '-'}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              {rows.length > 20 && <p className="text-xs text-muted-foreground">Showing first 20 of {rows.length} rows</p>}
+              <Button onClick={handleSubmit} disabled={loading}>{loading ? "Uploading..." : `Upload ${rows.length} Records`}</Button>
+            </div>
+          )}
+          {results && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Badge className="bg-green-100 text-green-700">{results.filter(r => r.success).length} succeeded</Badge>
+                <Badge className="bg-red-100 text-red-700">{results.filter(r => !r.success).length} failed</Badge>
+                <Button variant="outline" size="sm" onClick={() => { setRows([]); setResults(null); setFileName(""); }}>Upload Another</Button>
+              </div>
+              {results.some(r => !r.success) && (
+                <div className="overflow-x-auto rounded border">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Emp Code</TableHead><TableHead>Date</TableHead><TableHead>Error</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {results.filter(r => !r.success).map((r, i) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-sm">{r.employeeCode}</TableCell>
+                          <TableCell className="text-sm">{r.date}</TableCell>
+                          <TableCell className="text-sm text-red-600">{r.error}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

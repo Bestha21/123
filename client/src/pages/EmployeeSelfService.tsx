@@ -700,8 +700,8 @@ function EmployeeSelfServiceClassic() {
     ? employees?.find(e => e.employeeCode === currentEmployee.reportingManagerId || String(e.id) === String(currentEmployee.reportingManagerId))
     : null;
 
-  const currentDepartment = currentEmployee?.department || currentEmployee?.departmentId
-    ? employees?.find(e => e.id === currentEmployee?.id)?.department
+  const currentDepartment = currentEmployee?.departmentId
+    ? departments?.find(d => d.id === currentEmployee.departmentId)?.name || null
     : null;
 
   const upcomingBirthdays = employees
@@ -3901,7 +3901,7 @@ function EmployeeSelfServiceClassic() {
                 <div className="space-y-4">
                   <div className="p-4 bg-muted/50 rounded-lg">
                     <p className="text-sm text-muted-foreground">Department</p>
-                    <p className="font-semibold text-foreground">{currentEmployee?.department || 'N/A'}</p>
+                    <p className="font-semibold text-foreground">{currentDepartment || currentEmployee?.department || 'N/A'}</p>
                   </div>
                   <div className="p-4 bg-muted/50 rounded-lg space-y-2">
                     <p className="text-sm text-muted-foreground">Reporting Manager</p>
@@ -4159,7 +4159,7 @@ function EmployeeSelfServiceClassic() {
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Department</label>
-                        <p className="text-sm font-medium">{currentEmployee.department || '-'}</p>
+                        <p className="text-sm font-medium">{currentDepartment || currentEmployee.department || '-'}</p>
                       </div>
                       <div className="space-y-1">
                         <label className="text-xs text-muted-foreground">Designation</label>

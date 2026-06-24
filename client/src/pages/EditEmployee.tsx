@@ -147,6 +147,7 @@ export default function EditEmployee() {
         remoteLoginAuthorized: employee.remoteLoginAuthorized || false,
         biometricDeviceId: employee.biometricDeviceId || "",
         attendanceExempt: employee.attendanceExempt || false,
+        compOffEligible: (employee as any).compOffEligible || false,
       });
     }
   }, [employee]);
@@ -539,18 +540,18 @@ export default function EditEmployee() {
                       <SelectItem value="true">Yes (VP / Director / MD / CEO)</SelectItem>
                     </SelectContent>
                   </Select>
+                <div className="space-y-2">
                 </div>
-				<div className="space-y-2">
-  <Label>Comp-Off Eligible</Label>
-  <Select value={(formData as any).compOffEligible ? "true" : "false"} onValueChange={(v) => updateField("compOffEligible", v === "true")}>
-    <SelectTrigger data-testid="select-compOffEligible"><SelectValue placeholder="Select" /></SelectTrigger>
-    <SelectContent>
-      <SelectItem value="false">No (Default)</SelectItem>
-      <SelectItem value="true">Yes (Can Request Comp-Off)</SelectItem>
-    </SelectContent>
-  </Select>
-  <p className="text-xs text-muted-foreground">Allow this employee to submit comp-off requests for working on weekends/holidays</p>
-</div>
+                  <Label>Comp-Off Eligible</Label>
+                  <Select value={(formData as any).compOffEligible ? "true" : "false"} onValueChange={(v) => updateField("compOffEligible", v === "true")}>
+                    <SelectTrigger data-testid="select-compOffEligible"><SelectValue placeholder="Select" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="false">No (Default)</SelectItem>
+                      <SelectItem value="true">Yes (Can Request Comp-Off)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground">Allow this employee to submit comp-off requests for working on weekends/holidays</p>
+                </div>
                 <div className="space-y-2">
                   <Label>Employment Type</Label>
                   <Select value={formData.employmentType || ""} onValueChange={(v) => updateField("employmentType", v)}>

@@ -270,6 +270,71 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // Global RBAC middleware
+  // Privileged roles get full access. Regular employees get only ESS routes.
+  const RBAC_ALWAYS_ALLOWED = [
+    "/api/login", "/api/logout",
+    "/api/auth-status",
+    "/api/forgot-password", "/api/reset-password", "/api/validate-reset-token",
+    "/api/public/", "/api/external/",
+  ];
+  const RBAC_ESS_PREFIXES = [
+    "/api/me",
+    "/api/employees",
+    "/api/attendance",
+    "/api/leave",
+    "/api/leaves",
+    "/api/leave-balances",
+    "/api/leave-types",
+    "/api/tax-declarations",
+    "/api/documents",
+    "/api/assets",
+    "/api/profile-change-requests",
+    "/api/notifications",
+    "/api/departments",
+    "/api/designations",
+    "/api/announcements",
+    "/api/holidays",
+    "/api/expense",
+    "/api/expenses",
+    "/api/birthday-wishes",
+    "/api/company-policies",
+    "/api/policy-acknowledgments",
+    "/api/my-loans",
+    "/api/my-comp-off",
+    "/api/comp-off-requests",
+    "/api/on-duty-requests",
+    "/api/onboarding",
+    "/api/exit-records",
+    "/api/payroll",
+    "/api/overtime",
+  ];
+  const RBAC_PRIVILEGED_ROLES = ["admin", "hr", "hr_manager", "payroll_team", "manager", "leadership", "asset_team"];
+  app.use(async (req, res, next) => {
+    try {
+      const path = req.originalUrl.split("?")[0];
+      if (!path.startsWith("/api/")) return next();
+      if (RBAC_ALWAYS_ALLOWED.some(p => path === p || path.startsWith(p))) return next();
+      if (!req.isAuthenticated || !req.isAuthenticated()) return next();
+      const user = req.user;
+      const userEmail = user?.email || user?.claims?.email;
+      if (!userEmail) return next();
+      const emp = await storage.getEmployeeByEmail(userEmail);
+      if (!emp) return res.status(403).json({ message: "You don't have access." });
+      const roles = (emp.accessRole || "employee").split(",").map((r) => r.trim().toLowerCase());
+      const isPrivileged = roles.some((r) => RBAC_PRIVILEGED_ROLES.includes(r));
+      if (isPrivileged) return next();
+      const isEss = RBAC_ESS_PREFIXES.some(p => path === p || path.startsWith(p + "/") || path.startsWith(p + "?"));
+      const isOwnProfile = /^\/api\/employees\/\d+$/.test(path);
+      const isOwnPayslip = /^\/api\/payroll\/\d+$/.test(path);
+      if (isEss || isOwnProfile || isOwnPayslip) return next();
+      return res.status(403).json({ message: "You don't have access." });
+    } catch (err) {
+      return next();
+    }
+  });
+
+
   // Dashboard Stats
   app.get(api.dashboard.stats.path, async (req, res) => {
     const today = format(new Date(), 'yyyy-MM-dd');
@@ -461,25 +526,52 @@ export async function registerRoutes(
   });
 
   // Employees
+  const SENSITIVE_EMPLOYEE_FIELDS = new Set([
+    "bankAccountNumber", "ifscCode", "bankName", "branchName",
+    "panNumber", "aadharNumber", "uanNumber", "pfNumber", "esiNumber",
+    "ctc", "salaryStructureId", "retentionBonus", "retentionBonusDuration",
+    "retentionBonusStartDate", "noticeBuyout", "noticeBuyoutDuration",
+    "noticeBuyoutPayments", "taxRegime", "pfStatus",
+    "insuranceAnnualPremium", "insuranceEmployeeSharePercent", "insuranceEmployerSharePercent",
+    "healthInsurancePolicyNumber", "lifeInsurancePolicyNumber", "personalAccidentPolicyNumber",
+    "accessRole",
+  ]);
+  function stripSensitiveFields(emp: any): any {
+    const out = { ...emp };
+    for (const field of SENSITIVE_EMPLOYEE_FIELDS) { delete out[field]; }
+    return out;
+  }
+
   app.get(api.employees.list.path, async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
     const employees = await storage.getEmployees();
     const entityIdParam = req.query.entityId ? String(req.query.entityId) : null;
-    if (entityIdParam) {
-      const entityIds = entityIdParam.split(',').map(Number).filter(n => !isNaN(n));
-      if (entityIds.length > 0) {
-        res.json(employees.filter(e => e.entityId && entityIds.includes(e.entityId)));
-      } else {
-        res.json(employees);
-      }
-    } else {
-      res.json(employees);
+    let result = entityIdParam
+      ? (() => {
+          const entityIds = entityIdParam.split(',').map(Number).filter(n => !isNaN(n));
+          return entityIds.length > 0 ? employees.filter(e => e.entityId && entityIds.includes(e.entityId)) : employees;
+        })()
+      : employees;
+
+    if (!authorized) {
+      const user = req.user as any;
+      const userEmail = user?.email || user?.claims?.email;
+      const selfEmail = userEmail?.toLowerCase();
+      return res.json(result.map((e: any) =>
+        e.email?.toLowerCase() === selfEmail ? e : stripSensitiveFields(e)
+      ));
     }
+    res.json(result);
   });
 
   app.get(api.employees.get.path, async (req, res) => {
     const emp = await storage.getEmployee(Number(req.params.id));
     if (!emp) return res.status(404).json({ message: "Not found" });
-    res.json(emp);
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
+    const user = req.user as any;
+    const isSelf = user?.email && emp.email && user.email.toLowerCase() === emp.email.toLowerCase();
+    if (authorized || isSelf) return res.json(emp);
+    return res.status(403).json({ message: "Access denied." });
   });
 
   app.post(api.employees.create.path, async (req, res) => {
@@ -803,6 +895,8 @@ app.delete("/api/departments/:id", async (req, res) => {
   });
 
   app.post(api.departments.create.path, async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
     const input = api.departments.create.input.parse(req.body);
     const dept = await storage.createDepartment(input);
     res.status(201).json(dept);
@@ -810,6 +904,8 @@ app.delete("/api/departments/:id", async (req, res) => {
 
   // Salary Structures
   app.get("/api/salary-structures", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR/Payroll role required." });
     const structures = await storage.getSalaryStructures();
     const entityIdParam = req.query.entityId ? String(req.query.entityId) : null;
     if (entityIdParam) {
@@ -823,22 +919,30 @@ app.delete("/api/departments/:id", async (req, res) => {
   });
 
   app.get("/api/salary-structures/:id", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR/Payroll role required." });
     const structure = await storage.getSalaryStructure(Number(req.params.id));
     if (!structure) return res.status(404).json({ message: "Not found" });
     res.json(structure);
   });
 
   app.post("/api/salary-structures", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR/Payroll role required." });
     const structure = await storage.createSalaryStructure(req.body);
     res.status(201).json(structure);
   });
 
   app.patch("/api/salary-structures/:id", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR/Payroll role required." });
     const structure = await storage.updateSalaryStructure(Number(req.params.id), req.body);
     res.json(structure);
   });
 
   app.delete("/api/salary-structures/:id", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR/Payroll role required." });
     await storage.deleteSalaryStructure(Number(req.params.id));
     res.status(204).send();
   });
@@ -932,12 +1036,22 @@ app.delete("/api/departments/:id", async (req, res) => {
 
   // Documents
   app.get(api.documents.list.path, async (req, res) => {
-    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const user = req.user;
+    const userEmail = user?.email || user?.claims?.email;
+    let employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    if (userEmail) {
+      const currentEmp = await storage.getEmployeeByEmail(userEmail);
+      if (currentEmp) {
+        const roles = (currentEmp.accessRole || 'employee').split(',').map((r) => r.trim().toLowerCase());
+        const isPriv = roles.includes('admin') || roles.includes('hr') || roles.includes('hr_manager');
+        if (!isPriv) employeeId = currentEmp.id;
+      }
+    }
     const docs = await storage.getDocuments(employeeId);
     // Strip heavy Base64 file content from list payloads — only metadata is needed
     // for the Document Management UI. The actual file is fetched on-demand via
     // GET /api/documents/:id/file when the user clicks Download / View.
-    const docsLite = docs.map((d: any) => {
+    const docsLite = docs.map((d) => {
       const { fileData, ...rest } = d;
       return rest;
     });
@@ -1167,10 +1281,24 @@ app.delete("/api/departments/:id", async (req, res) => {
 
   // Attendance
   app.get(api.attendance.list.path, async (req, res) => {
-    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const user = req.user as any;
+    const userEmail = user?.email || user?.claims?.email;
+    let employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const date = req.query.date as string | undefined;
     const startDate = req.query.startDate as string | undefined;
     const endDate = req.query.endDate as string | undefined;
+
+    if (userEmail) {
+      const currentEmp = await storage.getEmployeeByEmail(userEmail);
+      if (currentEmp) {
+        const roles = (currentEmp.accessRole || 'employee').split(',').map((r) => r.trim().toLowerCase());
+        const isPriv = roles.includes('admin') || roles.includes('hr') || roles.includes('hr_manager') || roles.includes('manager') || roles.includes('leadership');
+        if (!isPriv) {
+          employeeId = currentEmp.id;
+        }
+      }
+    }
+
     if (startDate && endDate) {
       const list = await storage.getAttendanceByDateRange(startDate, endDate, employeeId);
       return res.json(list);
@@ -1486,7 +1614,10 @@ app.delete("/api/departments/:id", async (req, res) => {
         cursor.setDate(cursor.getDate() + 1);
       }
 
-      const todayEmployeeIds = [...new Set(todayLogs.map(l => l.employeeId))];
+      const filteredTodayLogs = allowedEmpIds
+        ? todayLogs.filter(l => allowedEmpIds!.has(Number(l.employeeId)))
+        : todayLogs;
+      const todayEmployeeIds = [...new Set(filteredTodayLogs.map(l => l.employeeId))];
       let todayDetailedLogs: any[] = [];
       for (const empId of todayEmployeeIds) {
         const empLogs = await storage.getAttendanceLogs({ employeeId: empId });
@@ -1505,7 +1636,7 @@ app.delete("/api/departments/:id", async (req, res) => {
         lateToday,
         totalEmployees: activeEmployees.length,
         workingDaysInCycle,
-        todayLogs: todayLogs.map(l => {
+        todayLogs: filteredTodayLogs.map(l => {
           const emp = activeEmployees.find(e => e.id === l.employeeId);
           return {
             ...l,
@@ -1549,6 +1680,8 @@ app.delete("/api/departments/:id", async (req, res) => {
 
   app.get("/api/attendance/sheet", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "manager", "leadership"]);
+      if (!authorized) return res.status(403).json({ message: "Access denied. Manager or HR role required." });
       const { month, year } = req.query;
       if (!month || !year) return res.status(400).json({ message: "month and year required" });
 
@@ -1631,7 +1764,7 @@ app.delete("/api/departments/:id", async (req, res) => {
           while (lCursor <= le) {
             const ld = format(lCursor, 'yyyy-MM-dd');
             if (ld >= startStr && ld <= endStr) {
-              leaveDateMap[ld] = isHalfDay ? `½${leaveCode}` : leaveCode;
+              leaveDateMap[ld] = isHalfDay ? `HD(${leaveCode})` : leaveCode;
             }
             lCursor.setDate(lCursor.getDate() + 1);
           }
@@ -1659,13 +1792,14 @@ app.delete("/api/departments/:id", async (req, res) => {
             dailyCodes[d] = 'WO';
             summary.weeklyOff++;
           } else if (leaveCode) {
-            if (leaveCode.startsWith('½')) {
+            if (leaveCode.startsWith('HD(')) {
               if (att && att.checkIn) {
                 dailyCodes[d] = leaveCode;
                 summary.halfDay++;
               } else {
-                dailyCodes[d] = leaveCode;
+                dailyCodes[d] = leaveCode + '/HLWP';
                 summary.halfDay++;
+                summary.lop++;
               }
             } else if (leaveCode === 'LOP' || leaveCode === 'LWP') {
               dailyCodes[d] = 'LWP';
@@ -1682,8 +1816,11 @@ app.delete("/api/departments/:id", async (req, res) => {
               dailyCodes[d] = 'PMS';
               summary.present++;
             } else if (att.status === 'half_day') {
-              dailyCodes[d] = '½P';
+              dailyCodes[d] = 'HD(P)';
               summary.halfDay++;
+            } else if (att.status === 'regularized') {
+              dailyCodes[d] = 'PR';
+              summary.present++;
             } else if (att.status === 'late' || att.status === 'late_deducted') {
               dailyCodes[d] = 'P';
               summary.present++;
@@ -1727,13 +1864,36 @@ app.delete("/api/departments/:id", async (req, res) => {
       if (!userEmail) return res.status(401).json({ message: "Unauthorized" });
       const currentEmployee = await storage.getEmployeeByEmail(userEmail);
 
-      const { attendanceId, reason, date, requestedCheckIn, requestedCheckOut } = req.body;
+      const { attendanceId, reason, date, requestedCheckIn, requestedCheckOut, regType } = req.body;
       if (!reason) return res.status(400).json({ message: "reason required" });
       if (!attendanceId && !date) return res.status(400).json({ message: "attendanceId or date required" });
 
+      const storedReason = regType === 'late_login' ? `[Late Login] ${reason}` : reason;
+
       let record = attendanceId ? await storage.getAttendanceById(attendanceId) : null;
 
-            // Date-based path (absent day) — create or reuse a row
+      // Late login path — must have existing record with check-in after 9:30 AM
+      if (regType === 'late_login') {
+        if (!currentEmployee) return res.status(403).json({ message: "Employee not found" });
+        const existing = record || (date ? await storage.getAttendanceByDate(currentEmployee.id, date) : null);
+        if (!existing) return res.status(400).json({ message: "No attendance record found for this date." });
+        if (!existing.checkIn) return res.status(400).json({ message: "No check-in time found for this date." });
+        const ci = new Date(existing.checkIn);
+        const ciMinutes = ci.getHours() * 60 + ci.getMinutes();
+        if (ciMinutes <= 9 * 60 + 30) {
+          return res.status(400).json({ message: `Check-in at ${String(ci.getHours()).padStart(2,'0')}:${String(ci.getMinutes()).padStart(2,'0')} is not late enough. Regularization is only allowed for check-ins after 9:30 AM.` });
+        }
+        if (existing.regularizationStatus === 'pending') {
+          return res.status(400).json({ message: `A regularization request for this date is already pending approval.` });
+        }
+        const updated = await storage.updateAttendance(existing.id, {
+          regularizationStatus: 'pending',
+          regularizationReason: storedReason,
+        });
+        return res.json(updated);
+      }
+
+      // Date-based path (absent day) — create or reuse a row
       if (!record && date) {
         if (!currentEmployee) return res.status(403).json({ message: "Employee not found" });
         const existing = await storage.getAttendanceByDate(currentEmployee.id, date);
@@ -1795,7 +1955,7 @@ app.delete("/api/departments/:id", async (req, res) => {
 
             const updated = await storage.updateAttendance(record.id, {
         regularizationStatus: 'pending',
-        regularizationReason: reason,
+        regularizationReason: storedReason,
       });
       res.json(updated);
     } catch (err: any) {
@@ -1860,28 +2020,153 @@ app.delete("/api/departments/:id", async (req, res) => {
 
       const updates: any = { regularizationStatus: regStatus };
       if (regStatus === 'approved') {
-        if (checkIn) updates.checkIn = new Date(checkIn);
-        if (checkOut) updates.checkOut = new Date(checkOut);
-        if (targetRecord && targetRecord.checkIn && checkOut) {
-          const ci = new Date(targetRecord.checkIn);
-          const co = new Date(checkOut);
-          const workHrs = ((co.getTime() - ci.getTime()) / (1000 * 60 * 60)).toFixed(2);
-          updates.workHours = workHrs;
-          if (parseFloat(workHrs) >= 9) {
-            updates.status = 'present';
-          } else if (parseFloat(workHrs) >= 4.5) {
-            updates.status = 'half_day';
+        const isLateLogin = (targetRecord.regularizationReason || '').includes('[Late Login]');
+        if (isLateLogin) {
+          let shiftStartHour = 9, shiftStartMin = 30;
+          if (targetEmployee?.shiftId) {
+            const empShift = await storage.getShift(targetEmployee.shiftId);
+            if (empShift?.startTime) {
+              const [ssh, ssm] = empShift.startTime.split(':').map(Number);
+              shiftStartHour = ssh;
+              shiftStartMin = ssm;
+            }
           }
+          const recordDate = targetRecord.date;
+          const [yr, mo, dy] = recordDate.split('-').map(Number);
+          const shiftTotalMinutesIST = shiftStartHour * 60 + shiftStartMin;
+          const shiftTotalMinutesUTC = shiftTotalMinutesIST - 330;
+          const utcH = Math.floor(shiftTotalMinutesUTC / 60);
+          const utcM = shiftTotalMinutesUTC % 60;
+          const regularizedCheckIn = new Date(Date.UTC(yr, mo - 1, dy, utcH, utcM, 0));
+          updates.checkIn = regularizedCheckIn;
+          if (checkOut) updates.checkOut = new Date(checkOut);
+          const effectiveCheckOut = checkOut
+            ? new Date(checkOut)
+            : (targetRecord.checkOut ? new Date(targetRecord.checkOut) : null);
+          if (effectiveCheckOut) {
+            const workHrs = ((effectiveCheckOut.getTime() - regularizedCheckIn.getTime()) / (1000 * 60 * 60)).toFixed(2);
+            updates.workHours = workHrs;
+          }
+          updates.status = 'regularized';
         } else {
-          updates.status = 'present';
+          if (checkIn) updates.checkIn = new Date(checkIn);
+          if (checkOut) updates.checkOut = new Date(checkOut);
+          const effectiveCheckIn = checkIn ? new Date(checkIn) : (targetRecord.checkIn ? new Date(targetRecord.checkIn) : null);
+          const effectiveCheckOut = checkOut ? new Date(checkOut) : (targetRecord.checkOut ? new Date(targetRecord.checkOut) : null);
+          if (effectiveCheckIn && effectiveCheckOut) {
+            const workHrs = ((effectiveCheckOut.getTime() - effectiveCheckIn.getTime()) / (1000 * 60 * 60)).toFixed(2);
+            updates.workHours = workHrs;
+            const hrs = parseFloat(workHrs);
+            if (hrs >= 9) { updates.status = 'present'; }
+            else if (hrs >= 4.5) { updates.status = 'half_day'; }
+            else { updates.status = 'present'; }
+          } else {
+            updates.status = 'present';
+          }
         }
       }
-
       const updated = await storage.updateAttendance(parseInt(id), updates);
       res.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
+  });
+
+  app.post("/api/attendance/bulk-upload", async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userEmail = user?.email || user?.claims?.email;
+      if (!userEmail) return res.status(401).json({ message: "Unauthorized" });
+      const currentEmployee = await storage.getEmployeeByEmail(userEmail);
+      if (!currentEmployee) return res.status(403).json({ message: "Employee not found" });
+      const roles = (currentEmployee.accessRole || "employee").split(",").map((r: string) => r.trim());
+      if (!roles.includes("admin") && !roles.includes("hr") && !roles.includes("hr_manager")) {
+        return res.status(403).json({ message: "Admin/HR access required" });
+      }
+      const { rows } = req.body;
+      if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ message: "No rows provided" });
+      const allEmployees = await storage.getEmployees();
+      const empByCode: Record<string, any> = Object.fromEntries(allEmployees.map((e: any) => [e.employeeCode, e]));
+      const results: any[] = [];
+      for (const row of rows) {
+        const emp = empByCode[String(row.employeeCode || '').trim()];
+        if (!emp) { results.push({ ...row, success: false, error: `Employee not found: ${row.employeeCode}` }); continue; }
+        // Normalise date: accept DD-MM-YYYY or YYYY-MM-DD
+        let isoDate: string = String(row.date || '').trim();
+        if (/^\d{2}-\d{2}-\d{4}$/.test(isoDate)) {
+          const [dd, mm, yyyy] = isoDate.split('-');
+          isoDate = `${yyyy}-${mm}-${dd}`;
+        }
+
+        const parseIstTime = (timeStr: string): Date | null => {
+          const t = String(timeStr || '').trim();
+          if (!t) return null;
+          const parts = t.split(':').map(Number);
+          if (parts.length < 2 || isNaN(parts[0]) || isNaN(parts[1])) return null;
+          const d = new Date(isoDate + 'T00:00:00Z');
+          if (isNaN(d.getTime())) return null;
+          d.setUTCMinutes(d.getUTCMinutes() + parts[0] * 60 + parts[1] - 330);
+          return d;
+        };
+
+        let checkIn: Date | null = parseIstTime(row.checkIn);
+        let checkOut: Date | null = parseIstTime(row.checkOut);
+        let workHours: string | null = null;
+        if (checkIn && checkOut && checkOut > checkIn) {
+          workHours = ((checkOut.getTime() - checkIn.getTime()) / 3600000).toFixed(2);
+        }
+        try {
+          const existing = await storage.getAttendanceByDate(emp.id, isoDate);
+          if (existing) {
+            await storage.updateAttendance(existing.id, {
+              ...(checkIn ? { checkIn } : {}),
+              ...(checkOut ? { checkOut } : {}),
+              ...(row.status ? { status: row.status } : {}),
+              ...(workHours ? { workHours } : {}),
+            });
+            results.push({ ...row, success: true, action: 'updated' });
+          } else {
+            await storage.createAttendance({ employeeId: emp.id, date: row.date, ...(checkIn ? { checkIn } : {}), ...(checkOut ? { checkOut } : {}), status: row.status || 'present', ...(workHours ? { workHours } : {}) } as any);
+            results.push({ ...row, success: true, action: 'created' });
+          }
+        } catch (e: any) { results.push({ ...row, success: false, error: e.message }); }
+      }
+      res.json({ results, total: rows.length, success: results.filter((r: any) => r.success).length, errors: results.filter((r: any) => !r.success).length });
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
+  });
+
+  app.post("/api/leave-requests/bulk-upload", async (req, res) => {
+    try {
+      const user = req.user as any;
+      const userEmail = user?.email || user?.claims?.email;
+      if (!userEmail) return res.status(401).json({ message: "Unauthorized" });
+      const currentEmployee = await storage.getEmployeeByEmail(userEmail);
+      if (!currentEmployee) return res.status(403).json({ message: "Employee not found" });
+      const roles = (currentEmployee.accessRole || "employee").split(",").map((r: string) => r.trim());
+      if (!roles.includes("admin") && !roles.includes("hr") && !roles.includes("hr_manager")) {
+        return res.status(403).json({ message: "Admin/HR access required" });
+      }
+      const { rows } = req.body;
+      if (!Array.isArray(rows) || rows.length === 0) return res.status(400).json({ message: "No rows provided" });
+      const allEmployees = await storage.getEmployees();
+      const empByCode: Record<string, any> = Object.fromEntries(allEmployees.map((e: any) => [e.employeeCode, e]));
+      const leaveTypes = await storage.getLeaveTypes();
+      const ltByCode: Record<string, any> = Object.fromEntries(leaveTypes.map((lt: any) => [lt.code.toUpperCase(), lt]));
+      const results: any[] = [];
+      for (const row of rows) {
+        const emp = empByCode[String(row.employeeCode || '').trim()];
+        if (!emp) { results.push({ ...row, success: false, error: `Employee not found: ${row.employeeCode}` }); continue; }
+        const lt = ltByCode[String(row.leaveTypeCode || '').trim().toUpperCase()];
+        if (!lt) { results.push({ ...row, success: false, error: `Leave type not found: ${row.leaveTypeCode}` }); continue; }
+        const status = String(row.status || 'approved').trim();
+        const days = String(parseFloat(row.days) || 1);
+        try {
+          await storage.createLeaveRequest({ employeeId: emp.id, leaveTypeId: lt.id, leaveType: lt.name, startDate: row.startDate, endDate: row.endDate, days, reason: row.reason || 'Bulk upload', status, approvedBy: status === 'approved' ? currentEmployee.employeeCode : null, approvedAt: status === 'approved' ? new Date() : null } as any);
+          results.push({ ...row, success: true, action: 'created' });
+        } catch (e: any) { results.push({ ...row, success: false, error: e.message }); }
+      }
+      res.json({ results, total: rows.length, success: results.filter((r: any) => r.success).length, errors: results.filter((r: any) => !r.success).length });
+    } catch (err: any) { res.status(500).json({ message: err.message }); }
   });
 
   app.get("/api/attendance/pending-regularizations", async (req, res) => {
@@ -2213,7 +2498,21 @@ app.delete("/api/departments/:id", async (req, res) => {
 
   // Leave Balances
   app.get(api.leaveBalances.list.path, async (req, res) => {
-    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const user = req.user as any;
+    const userEmail = user?.email || user?.claims?.email;
+    let employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+
+    if (userEmail) {
+      const currentEmp = await storage.getEmployeeByEmail(userEmail);
+      if (currentEmp) {
+        const roles = (currentEmp.accessRole || 'employee').split(',').map((r: string) => r.trim().toLowerCase());
+        const isPrivileged = roles.includes('admin') || roles.includes('hr') || roles.includes('hr_manager') || roles.includes('manager');
+        if (!isPrivileged) {
+          employeeId = currentEmp.id;
+        }
+      }
+    }
+
     if (employeeId && !isNaN(employeeId)) {
       const balances = await storage.getLeaveBalances(employeeId);
       res.json(balances);
@@ -2225,8 +2524,22 @@ app.delete("/api/departments/:id", async (req, res) => {
 
   // Leaves
   app.get(api.leave.list.path, async (req, res) => {
-    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const user = req.user as any;
+    const userEmail = user?.email || user?.claims?.email;
+    let employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const status = req.query.status as string | undefined;
+
+    if (userEmail) {
+      const currentEmp = await storage.getEmployeeByEmail(userEmail);
+      if (currentEmp) {
+        const roles = (currentEmp.accessRole || 'employee').split(',').map((r: string) => r.trim().toLowerCase());
+        const isPrivileged = roles.includes('admin') || roles.includes('hr') || roles.includes('hr_manager') || roles.includes('manager') || roles.includes('leadership');
+        if (!isPrivileged) {
+          employeeId = currentEmp.id;
+        }
+      }
+    }
+
     const leaves = await storage.getLeaveRequests(employeeId, status);
     res.json(leaves);
   });
@@ -2337,7 +2650,7 @@ app.delete("/api/departments/:id", async (req, res) => {
         }
 
         const exitRes = await pool.query(
-          `SELECT id FROM exit_records WHERE employee_id = $1 AND clearance_status != 'completed'`,
+          `SELECT id FROM exit_records WHERE employee_id = $1 AND clearance_status NOT IN ('completed', 'cancelled', 'rejected')`,
           [input.employeeId]
         );
         const isOnNotice = exitRes.rows.length > 0;
@@ -3037,7 +3350,24 @@ app.delete("/api/departments/:id", async (req, res) => {
       }
 
       const updated = await storage.updateOnDutyRequest(parseInt(id), updates);
-      res.json(updated);
+      
+      // When fully approved, mark the OD date as on_duty in attendance
+      if (approvalStatus === 'approved') {
+        const odDate = typeof odRequest.date === 'string'
+          ? odRequest.date.split('T')[0]
+          : new Date(odRequest.date).toISOString().split('T')[0];
+        const empId = odRequest.employeeId;
+        const existing = await storage.getAttendanceByDate(empId, odDate);
+        if (existing) {
+          const safeToOverride = ['absent', 'full_day_deduction', 'missed_punch', null, undefined].includes(existing.status) || !existing.status;
+          if (safeToOverride || (!existing.checkIn && !existing.checkOut)) {
+            await storage.updateAttendance(existing.id, { status: 'on_duty' });
+          }
+        } else {
+          await storage.createAttendance({ employeeId: empId, date: odDate, status: 'on_duty' } as any);
+        }
+      }
+            res.jsonres.json(updated);
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -3046,10 +3376,23 @@ app.delete("/api/departments/:id", async (req, res) => {
   // Profile Change Requests
   app.get("/api/profile-change-requests", async (req, res) => {
     try {
-      const { employeeId, status } = req.query;
+      const user = req.user as any;
+      const userEmail = user?.email || user?.claims?.email;
       const filters: any = {};
-      if (employeeId) filters.employeeId = parseInt(employeeId as string);
-      if (status) filters.status = status as string;
+      if (req.query.employeeId) filters.employeeId = parseInt(req.query.employeeId as string);
+      if (req.query.status) filters.status = req.query.status as string;
+
+      if (userEmail) {
+        const currentEmp = await storage.getEmployeeByEmail(userEmail);
+        if (currentEmp) {
+          const roles = (currentEmp.accessRole || 'employee').split(',').map((r: string) => r.trim().toLowerCase());
+          const isPrivileged = roles.includes('admin') || roles.includes('hr') || roles.includes('hr_manager');
+          if (!isPrivileged) {
+            filters.employeeId = currentEmp.id;
+          }
+        }
+      }
+
       const requests = await storage.getProfileChangeRequests(filters);
       res.json(requests);
     } catch (err: any) {
@@ -3455,12 +3798,16 @@ res.status(201).json(created);
   });
 
   app.post(api.payroll.create.path, async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. Only payroll/HR team can create payroll records." });
     const input = api.payroll.create.input.parse(req.body);
     const record = await storage.createPayroll(input);
     res.status(201).json(record);
   });
 
   app.patch(api.payroll.updateStatus.path, async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. Only payroll/HR team can update payroll status." });
     const { status } = api.payroll.updateStatus.input.parse(req.body);
     const record = await storage.updatePayrollStatus(Number(req.params.id), status);
     res.json(record);
@@ -3572,6 +3919,9 @@ res.status(201).json(created);
 
   app.post("/api/payroll/run", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
+      if (!authorized) return res.status(403).json({ message: "Access denied. Only payroll/HR team can run payroll." });
+
       const { month, year, employeeIds, deductions, saveAsDraft } = req.body;
       if (!month || !year || !employeeIds || !Array.isArray(employeeIds)) {
         return res.status(400).json({ message: "month, year, and employeeIds are required" });
@@ -3875,13 +4225,30 @@ res.status(201).json(created);
   });
 
   app.get("/api/payroll/:id", async (req, res) => {
+    const user = req.user as any;
+    const userEmail = user?.email || user?.claims?.email;
     const record = await storage.getPayrollById(Number(req.params.id));
     if (!record) return res.status(404).json({ message: "Payroll record not found" });
+
+    if (userEmail) {
+      const currentEmp = await storage.getEmployeeByEmail(userEmail);
+      if (currentEmp) {
+        const roles = (currentEmp.accessRole || 'employee').split(',').map((r: string) => r.trim().toLowerCase());
+        const isPrivileged = roles.includes('admin') || roles.includes('hr') || roles.includes('hr_manager') || roles.includes('payroll_team');
+        if (!isPrivileged && record.employeeId !== currentEmp.id) {
+          return res.status(403).json({ message: "Access denied. You can only view your own payroll records." });
+        }
+      }
+    }
+
     res.json(record);
   });
 
   app.patch("/api/payroll/:id", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "payroll_team"]);
+      if (!authorized) return res.status(403).json({ message: "Access denied. Only payroll/HR team can edit payroll records." });
+
       const id = Number(req.params.id);
       const record = await storage.getPayrollById(id);
       if (!record) return res.status(404).json({ message: "Payroll record not found" });
@@ -3932,25 +4299,45 @@ res.status(201).json(created);
 
   // Assets
   app.get(api.assets.list.path, async (req, res) => {
-    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const user = req.user as any;
+    const userEmail = user?.email || user?.claims?.email;
+    let employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const status = req.query.status as string | undefined;
+
+    if (userEmail) {
+      const currentEmp = await storage.getEmployeeByEmail(userEmail);
+      if (currentEmp) {
+        const roles = (currentEmp.accessRole || 'employee').split(',').map((r: string) => r.trim().toLowerCase());
+        const isPrivileged = roles.includes('admin') || roles.includes('hr') || roles.includes('hr_manager') || roles.includes('asset_team');
+        if (!isPrivileged) {
+          employeeId = currentEmp.id;
+        }
+      }
+    }
+
     const list = await storage.getAssets(employeeId, status);
     res.json(list);
   });
 
   app.get(api.assets.get.path, async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "asset_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR/Asset team role required." });
     const asset = await storage.getAsset(Number(req.params.id));
     if (!asset) return res.status(404).json({ message: "Not found" });
     res.json(asset);
   });
 
   app.post(api.assets.create.path, async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "asset_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR/Asset team role required." });
     const input = api.assets.create.input.parse(req.body);
     const asset = await storage.createAsset(input);
     res.status(201).json(asset);
   });
 
   app.post(api.assets.assign.path, async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "asset_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR/Asset team role required." });
     const { employeeId, assignedDate } = api.assets.assign.input.parse(req.body);
     const asset = await storage.updateAsset(Number(req.params.id), {
       employeeId,
@@ -3961,6 +4348,8 @@ res.status(201).json(created);
   });
 
   app.post(api.assets.return.path, async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager", "asset_team"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR/Asset team role required." });
     const { returnedDate, condition } = api.assets.return.input.parse(req.body);
     const asset = await storage.updateAsset(Number(req.params.id), {
       returnedDate,
@@ -3973,8 +4362,22 @@ res.status(201).json(created);
 
   // Exit Records
   app.get(api.exit.list.path, async (req, res) => {
+    const user = req.user as any;
+    const userEmail = user?.email || user?.claims?.email;
     const status = req.query.status as string | undefined;
-    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    let employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+
+    if (userEmail) {
+      const currentEmp = await storage.getEmployeeByEmail(userEmail);
+      if (currentEmp) {
+        const roles = (currentEmp.accessRole || 'employee').split(',').map((r: string) => r.trim().toLowerCase());
+        const isPrivileged = roles.includes('admin') || roles.includes('hr') || roles.includes('hr_manager');
+        if (!isPrivileged) {
+          employeeId = currentEmp.id;
+        }
+      }
+    }
+
     let list = await storage.getExitRecords(status);
     if (employeeId) {
       list = list.filter(r => r.employeeId === employeeId);
@@ -4459,17 +4862,23 @@ res.status(201).json(created);
 
   // Offer Letters
   app.get("/api/offer-letters", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
     const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const letters = await storage.getOfferLetters(employeeId);
     res.json(letters);
   });
 
   app.post("/api/offer-letters", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
     const letter = await storage.createOfferLetter(req.body);
     res.status(201).json(letter);
   });
 
   app.post("/api/offer-letters/:id/send", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
     const { employeeId } = req.body;
     
     // Generate onboarding token when sending offer letter
@@ -4583,11 +4992,15 @@ res.status(201).json(created);
 
   // Letter Templates Routes
   app.get("/api/letter-templates", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
     const templates = await storage.getLetterTemplates();
     res.json(templates);
   });
 
   app.get("/api/letter-templates/:id", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
     const template = await storage.getLetterTemplate(Number(req.params.id));
     if (!template) return res.status(404).json({ message: "Template not found" });
     res.json(template);
@@ -4595,6 +5008,8 @@ res.status(201).json(created);
 
   app.post("/api/letter-templates", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+      if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
       const template = await storage.createLetterTemplate(req.body);
       res.status(201).json(template);
     } catch (error) {
@@ -4604,6 +5019,8 @@ res.status(201).json(created);
 
   app.patch("/api/letter-templates/:id", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+      if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
       const existing = await storage.getLetterTemplate(Number(req.params.id));
       if (!existing) return res.status(404).json({ message: "Template not found" });
       const template = await storage.updateLetterTemplate(Number(req.params.id), req.body);
@@ -4614,6 +5031,8 @@ res.status(201).json(created);
   });
 
   app.delete("/api/letter-templates/:id", async (req, res) => {
+    const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+    if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
     const existing = await storage.getLetterTemplate(Number(req.params.id));
     if (!existing) return res.status(404).json({ message: "Template not found" });
     await storage.deleteLetterTemplate(Number(req.params.id));
@@ -4622,13 +5041,29 @@ res.status(201).json(created);
 
   // Generated Letters Routes
   app.get("/api/generated-letters", async (req, res) => {
-    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const user = req.user as any;
+    const userEmail = user?.email || user?.claims?.email;
+    let employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+
+    if (userEmail) {
+      const currentEmp = await storage.getEmployeeByEmail(userEmail);
+      if (currentEmp) {
+        const roles = (currentEmp.accessRole || 'employee').split(',').map((r: string) => r.trim().toLowerCase());
+        const isPrivileged = roles.includes('admin') || roles.includes('hr') || roles.includes('hr_manager');
+        if (!isPrivileged) {
+          employeeId = currentEmp.id;
+        }
+      }
+    }
+
     const letters = await storage.getGeneratedLetters(employeeId);
     res.json(letters);
   });
 
   app.post("/api/generated-letters", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+      if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
       const letter = await storage.createGeneratedLetter(req.body);
       res.status(201).json(letter);
     } catch (error) {
@@ -4638,6 +5073,8 @@ res.status(201).json(created);
 
   app.patch("/api/generated-letters/:id/status", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+      if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
       const { status } = req.body;
       const letter = await storage.updateGeneratedLetterStatus(Number(req.params.id), status);
       res.json(letter);
@@ -4648,6 +5085,8 @@ res.status(201).json(created);
 
   app.patch("/api/generated-letters/:id/approve", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["hr", "hr_manager"]);
+      if (!authorized) return res.status(403).json({ message: "Access denied. HR role required." });
       const letterId = Number(req.params.id);
       const { approvedBy } = req.body;
       const result = await pool.query(
@@ -5330,8 +5769,22 @@ Authorised Signatory
 
   // Tax Declarations
   app.get("/api/tax-declarations", async (req, res) => {
-    const employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
+    const user = req.user as any;
+    const userEmail = user?.email || user?.claims?.email;
+    let employeeId = req.query.employeeId ? Number(req.query.employeeId) : undefined;
     const financialYear = req.query.financialYear as string | undefined;
+
+    if (userEmail) {
+      const currentEmp = await storage.getEmployeeByEmail(userEmail);
+      if (currentEmp) {
+        const roles = (currentEmp.accessRole || 'employee').split(',').map((r: string) => r.trim().toLowerCase());
+        const isPrivileged = roles.includes('admin') || roles.includes('hr') || roles.includes('hr_manager') || roles.includes('payroll_team');
+        if (!isPrivileged) {
+          employeeId = currentEmp.id;
+        }
+      }
+    }
+
     const declarations = await storage.getTaxDeclarations(employeeId, financialYear);
     res.json(declarations);
   });
@@ -7139,6 +7592,8 @@ Authorised Signatory
   // ===== GL Account Mappings CRUD =====
   app.get("/api/gl-account-mappings", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin", "hr_manager"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const result = await pool.query("SELECT * FROM gl_account_mappings ORDER BY line_no_base");
       res.json(result.rows);
     } catch (err: any) {
@@ -7148,6 +7603,8 @@ Authorised Signatory
 
   app.post("/api/gl-account-mappings", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const { component, accountNo, balAccountNo, description, type, lineNoBase } = req.body;
       const result = await pool.query(
         `INSERT INTO gl_account_mappings (component, account_no, bal_account_no, description, type, line_no_base) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (component) DO UPDATE SET account_no=$2, bal_account_no=$3, description=$4, type=$5, line_no_base=$6 RETURNING *`,
@@ -7161,6 +7618,8 @@ Authorised Signatory
 
   app.delete("/api/gl-account-mappings/:id", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       await pool.query("DELETE FROM gl_account_mappings WHERE id=$1", [req.params.id]);
       res.json({ success: true });
     } catch (err: any) {
@@ -7171,6 +7630,8 @@ Authorised Signatory
   // ===== Journal Entries =====
   app.get("/api/journal-entries", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin", "hr_manager"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const { month, year } = req.query;
       let query = "SELECT * FROM journal_entries";
       const params: any[] = [];
@@ -7327,6 +7788,8 @@ Authorised Signatory
   // ===== Biometric Devices CRUD =====
   app.get("/api/biometric-devices", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin", "hr_manager"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const result = await pool.query("SELECT * FROM biometric_devices ORDER BY id");
       res.json(result.rows);
     } catch (err: any) {
@@ -7336,6 +7799,8 @@ Authorised Signatory
 
   app.get("/api/biometric-punch-logs", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin", "hr_manager"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
       const result = await pool.query(
         `SELECT bpl.*, e.first_name, e.last_name, e.biometric_device_id FROM biometric_punch_logs bpl LEFT JOIN employees e ON bpl.employee_id = e.id ORDER BY bpl.punch_time DESC LIMIT $1`,
@@ -7349,6 +7814,8 @@ Authorised Signatory
 
   app.post("/api/biometric-devices", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const { name, type, location, ip, status, employees } = req.body;
       const result = await pool.query(
         `INSERT INTO biometric_devices (name, type, location, ip, status, employees) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
@@ -7815,6 +8282,8 @@ Authorised Signatory
   // ===== ERP Integrations CRUD =====
   app.get("/api/erp-integrations", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const result = await pool.query("SELECT * FROM erp_integrations ORDER BY id");
       res.json(result.rows);
     } catch (err: any) {
@@ -7824,6 +8293,8 @@ Authorised Signatory
 
   app.post("/api/erp-integrations", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const { name, category, status, features, connectionUrl } = req.body;
       const result = await pool.query(
         `INSERT INTO erp_integrations (name, category, status, features, connection_url) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
@@ -7837,6 +8308,8 @@ Authorised Signatory
 
   app.patch("/api/erp-integrations/:id", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const { id } = req.params;
       const { name, category, status, features, connectionUrl } = req.body;
       const sets: string[] = [];
@@ -7860,6 +8333,8 @@ Authorised Signatory
 
   app.delete("/api/erp-integrations/:id", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       await pool.query("DELETE FROM erp_integrations WHERE id=$1", [req.params.id]);
       res.json({ success: true });
     } catch (err: any) {
@@ -8123,6 +8598,8 @@ Authorised Signatory
   // ===== API Key Management (Admin only) =====
   app.get("/api/admin/api-key", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const key = process.env.EXTERNAL_API_KEY || '';
       res.json({ apiKey: key });
     } catch (error) {
@@ -8132,6 +8609,8 @@ Authorised Signatory
 
   app.post("/api/admin/api-key/regenerate", async (req, res) => {
     try {
+      const { authorized } = await checkUserRole(req, ["admin"]);
+      if (!authorized) return res.status(403).json({ error: "Admin access required" });
       const newKey = crypto.randomBytes(32).toString('hex');
       process.env.EXTERNAL_API_KEY = newKey;
       res.json({ apiKey: newKey, message: 'API key regenerated successfully' });

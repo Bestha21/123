@@ -166,7 +166,7 @@ export default function Leaves() {
     queryKey: [`/api/exit-records?employeeId=${currentEmployee?.id}`],
     enabled: !!currentEmployee?.id,
   });
-  const isOnNoticePeriod = exitRecords?.some((er: any) => er.clearanceStatus !== 'completed');
+  const isOnNoticePeriod = exitRecords?.some((er: any) => !['completed', 'cancelled', 'rejected'].includes(er.clearanceStatus));
 
   const { data: myCompOffRequests } = useQuery<any[]>({
     queryKey: ["/api/my-comp-off-requests"],
@@ -306,6 +306,7 @@ export default function Leaves() {
 
   const myLeaves = leaves?.filter(l => l.employeeId === currentEmployee?.id) || [];
   const selfBalanceMap = buildBalanceMap(leaveBalances, myLeaves);
+  const activeBalanceMap = viewMode === "self" ? selfBalanceMap : viewBalanceMap;
 
   const pendingCompOffs = (allCompOffRequests || []).filter((r: any) => {
     if (r.status !== 'pending') return false;
@@ -347,10 +348,8 @@ export default function Leaves() {
 
   const leaveTypeOptions = BASE_LEAVE_TYPE_OPTIONS.filter(opt => {
     if (!opt.gender) {
-      if (opt.value === 'earned' && daysSinceJoining < 180) return false;
-      if (opt.value === 'earned' && isOnNoticePeriod) return false;
-      if (opt.value === 'casual' && isOnNoticePeriod) return false;
-      if (opt.value === 'comp_off' && isOnNoticePeriod) return false;
+      if (opt.value === 'casual' && viewMode === "self" && isOnNoticePeriod) return false;
+      if (opt.value === 'comp_off' && viewMode === "self" && isOnNoticePeriod) return false;
       return true;
     }
     if (isAdmin) return true;
@@ -409,6 +408,12 @@ export default function Leaves() {
       if (!leaveType || !startDate || !endDate) throw new Error("Please fill all required fields");
       if (insufficientBalance) {
         throw new Error("Sufficient leave balance not available to submit the request");
+      }
+      if (leaveType === 'earned') {
+        const elBalance = activeBalanceMap['EL']?.balance ?? 0;
+        if (viewMode === "self" && isProbation) throw new Error("Earned Leave will be available after completing 180 days of service.");
+        if (viewMode === "self" && isOnNoticePeriod) throw new Error("Earned Leave is not available during notice period.");
+        if (daysSinceJoining < 180 && elBalance <= 0) throw new Error(`Earned Leave will be available after completing 180 days of service (${Math.max(0, 180 - daysSinceJoining)} days remaining).`);
       }
 
       if (leaveType === "sick" && !isHalfDay && startDate && endDate) {
@@ -543,8 +548,25 @@ export default function Leaves() {
     }
   });
 
+  const cancelCompOffMutation = useMutation({
+    mutationFn: async (id) => {
+      return apiRequest("POST", `/api/comp-off-requests/${id}/cancel`, {});
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/my-comp-off-requests"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/my-comp-off-balance"] });
+      toast({ title: "Comp-Off request cancelled" });
+    },
+    onError: (err) => {
+      toast({ title: "Failed to cancel", description: err.message, variant: "destructive" });
+    }
+  });
+
   const getViewCompOffs = () => {
-    if (viewMode === "self") return myCompOffRequests || [];
+    if (viewMode === "self") {
+      if (isAdmin) return allCompOffRequests || [];
+      return myCompOffRequests || [];
+    }
     if (viewMode === "specific" && selectedMemberId) {
       return (allCompOffRequests || []).filter((r: any) => r.employeeId === selectedMemberId);
     }
@@ -712,12 +734,7 @@ export default function Leaves() {
               <DialogTitle>Apply for Leave</DialogTitle>
             </DialogHeader>
             <form className="space-y-4 mt-4" onSubmit={(e) => { e.preventDefault(); applyLeaveMutation.mutate(); }}>
-              {daysSinceJoining < 180 && !isProbation && (
-                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200 text-sm text-blue-800">
-                  <Info className="w-4 h-4 inline mr-1" />
-                  Earned Leave (EL) will be available after completing 180 days of service ({180 - daysSinceJoining} days remaining).
-                </div>
-              )}
+
               <div className="space-y-2">
                 <label className="text-sm font-medium">Leave Type</label>
                 <Select value={leaveType} onValueChange={setLeaveType}>
@@ -732,6 +749,18 @@ export default function Leaves() {
                     ))}
                   </SelectContent>
                 </Select>
+                {leaveType === 'earned' && (() => {
+                  const elBalance = activeBalanceMap['EL']?.balance ?? 0;
+                  if (viewMode === "self" && isProbation)
+                    return <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800"><Info className="w-3 h-3 inline mr-1" />Earned Leave will be available after completing 180 days of service.</div>;
+                  if (viewMode === "self" && isOnNoticePeriod)
+                    return <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800"><Info className="w-3 h-3 inline mr-1" />Earned Leave is not available during notice period.</div>;
+                  if (daysSinceJoining < 180 && elBalance <= 0)
+                    return <div className="p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-800"><Info className="w-3 h-3 inline mr-1" />Earned Leave will be available after completing 180 days of service ({Math.max(0, 180 - daysSinceJoining)} days remaining).</div>;
+                  if (elBalance <= 0)
+                    return <div className="p-2 bg-amber-50 border border-amber-200 rounded text-xs text-amber-800"><Info className="w-3 h-3 inline mr-1" />No Earned Leave balance available. You may apply as Loss of Pay.</div>;
+                  return null;
+                })()}
                 {selectedLeaveBalance && !['lop', 'comp_off'].includes(leaveType) && (
                   <div
                     className="text-xs text-muted-foreground"
@@ -853,6 +882,11 @@ export default function Leaves() {
               Leave Automation
             </TabsTrigger>
           )}
+          {isAdmin && (
+            <TabsTrigger value="leavebulkupload" data-testid="tab-leavebulkupload">
+              Bulk Upload
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <TabsContent value="leaves">
@@ -887,7 +921,7 @@ export default function Leaves() {
                           <th className="pb-3 font-medium">Reason</th>
                           <th className="pb-3 font-medium">Status</th>
                           <th className="pb-3 font-medium">Applied On</th>
-                          {viewMode === "self" && <th className="pb-3 font-medium">Actions</th>}
+                          {(viewMode === "self" || hasReportees) && <th className="pb-3 font-medium">Actions</th>}
                         </tr>
                       </thead>
                       <tbody>
@@ -922,9 +956,9 @@ export default function Leaves() {
                               <td className="py-3 text-xs text-slate-500">
                                 {leave.createdAt ? format(new Date(leave.createdAt), 'dd MMM yyyy') : '-'}
                               </td>
-                              {viewMode === "self" && (
+                              {(viewMode === "self" || hasReportees) && (
                                 <td className="py-3">
-                                  {(leave.status === 'pending' || leave.status === 'approved') && (
+                                  {leave.status === 'pending' && (
                                     <Button
                                       size="sm"
                                       variant="outline"
@@ -940,6 +974,26 @@ export default function Leaves() {
                                       <XCircle className="w-3 h-3 mr-1" />
                                       Cancel
                                     </Button>
+                                  )}
+                                  {leave.status === 'approved' && hasReportees && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-red-600 border-red-200 hover:bg-red-50"
+                                      onClick={() => {
+                                        if (confirm(`Cancel this approved ${leave.leaveType} leave from ${leave.startDate} to ${leave.endDate}? This will restore the leave balance.`)) {
+                                          cancelLeaveMutation.mutate(leave.id);
+                                        }
+                                      }}
+                                      disabled={cancelLeaveMutation.isPending}
+                                      data-testid={`button-cancel-approved-leave-${leave.id}`}
+                                    >
+                                      <XCircle className="w-3 h-3 mr-1" />
+                                      Cancel
+                                    </Button>
+                                  )}
+                                  {leave.status === 'approved' && !hasReportees && (
+                                    <span className="text-xs text-muted-foreground italic">Contact HR/Manager to withdraw</span>
                                   )}
                                 </td>
                               )}
@@ -1238,9 +1292,9 @@ export default function Leaves() {
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
                   <Award className="w-5 h-5 text-yellow-500" />
-                  {viewMode === "self" ? "My Comp-Off Requests" : viewMode === "all" ? "All Comp-Off Requests" : viewTargetEmployee ? `${viewTargetEmployee.firstName}'s Comp-Off Requests` : "Comp-Off Requests"}
+                  {viewMode === "self" ? (isAdmin ? "All Comp-Off Requests" : "My Comp-Off Requests") : viewMode === "all" ? "All Comp-Off Requests" : viewTargetEmployee ? `${viewTargetEmployee.firstName}'s Comp-Off Requests` : "Comp-Off Requests"}
                 </CardTitle>
-                {viewMode === "self" && (
+                {viewMode === "self" && !!(currentEmployee as any)?.compOffEligible && (
                   <Dialog open={compOffDialogOpen} onOpenChange={setCompOffDialogOpen}>
                     <DialogTrigger asChild>
                       <Button size="sm" data-testid="button-request-compoff">
@@ -1305,7 +1359,7 @@ export default function Leaves() {
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b">
-                          {viewMode !== "self" && <th className="text-left p-2">Employee</th>}
+                          {(viewMode !== "self" || isAdmin) && <th className="text-left p-2">Employee</th>}
                           <th className="text-left p-2">Work Date</th>
                           <th className="text-left p-2">Type</th>
                           <th className="text-left p-2">Hours</th>
@@ -1313,6 +1367,7 @@ export default function Leaves() {
                           <th className="text-left p-2">Expiry</th>
                           <th className="text-left p-2">Status</th>
                           <th className="text-left p-2">Reason</th>
+                          <th className="text-left p-2">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1321,7 +1376,7 @@ export default function Leaves() {
                           const isExpired = r.status === 'approved' && !r.availedDate && r.expiryDate && r.expiryDate < format(new Date(), 'yyyy-MM-dd');
                           return (
                             <tr key={r.id} className="border-b hover:bg-muted/50">
-                              {viewMode !== "self" && (
+                              {(viewMode !== "self" || isAdmin) && (
                                 <td className="p-2 font-medium">{emp ? `${emp.firstName} ${emp.lastName || ''}` : `Emp #${r.employeeId}`}</td>
                               )}
                               <td className="p-2">{r.workDate}</td>
@@ -1334,6 +1389,34 @@ export default function Leaves() {
                               </td>
                               <td className="p-2">{getLeaveStatusBadge(r.status)}</td>
                               <td className="p-2 text-muted-foreground max-w-[200px] truncate">{r.reason || '-'}</td>
+                              <td className="p-2">
+                                <div className="flex gap-1 flex-wrap">
+                                  {r.status === "pending" && r.employeeId !== currentEmployee?.id && (isAdmin || employees?.find(e => e.id === r.employeeId)?.reportingManagerId === currentEmployee?.employeeCode) && (
+                                    <>
+                                      <Button size="sm" variant="outline"
+                                        className="text-green-600 border-green-300 hover:bg-green-50 h-7 px-2"
+                                        onClick={() => approveCompOffMutation.mutate(r.id)}
+                                        disabled={approveCompOffMutation.isPending}>
+                                        <CheckCircle className="w-3 h-3 mr-1" /> Approve
+                                      </Button>
+                                      <Button size="sm" variant="outline"
+                                        className="text-red-600 border-red-300 hover:bg-red-50 h-7 px-2"
+                                        onClick={() => rejectCompOffMutation.mutate({ id: r.id })}
+                                        disabled={rejectCompOffMutation.isPending}>
+                                        <XCircle className="w-3 h-3 mr-1" /> Reject
+                                      </Button>
+                                    </>
+                                  )}
+                                  {r.status === "pending" && r.employeeId === currentEmployee?.id && (
+                                    <Button size="sm" variant="outline"
+                                      className="text-red-600 border-red-300 hover:bg-red-50 h-7 px-2"
+                                      onClick={() => { if (confirm("Cancel this comp-off request?")) cancelCompOffMutation.mutate(r.id); }}
+                                      disabled={cancelCompOffMutation.isPending}>
+                                      <XCircle className="w-3 h-3 mr-1" /> Cancel
+                                    </Button>
+                                  )}
+                                </div>
+                              </td>
                             </tr>
                           );
                         })}
@@ -1585,7 +1668,145 @@ export default function Leaves() {
           </TabsContent>
         )}
 
+        {isAdmin && (
+          <TabsContent value="leavebulkupload">
+            <LeaveBulkUploadTab />
+          </TabsContent>
+        )}
       </Tabs>
+    </div>
+  );
+}
+
+function LeaveBulkUploadTab() {
+  const { toast } = useToast();
+  const [rows, setRows] = useState<any[]>([]);
+  const [fileName, setFileName] = useState("");
+  const [results, setResults] = useState<any[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const { data: leaveTypes } = useQuery<any[]>({ queryKey: ["/api/leave-types"] });
+
+  function downloadTemplate() {
+    const csv = "employee_code,leave_type_code,start_date,end_date,days,reason,status\nEMP001,CL,2026-06-01,2026-06-01,1,Annual leave,approved\nEMP002,SL,2026-06-03,2026-06-04,2,Sick leave,approved";
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "leaves_bulk_upload_template.csv"; a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function parseCSV(text: string) {
+    const lines = text.trim().split("\n").filter(l => l.trim());
+    if (lines.length < 2) return [];
+    const headers = lines[0].split(",").map(h => h.trim().toLowerCase().replace(/\s+/g, '_'));
+    return lines.slice(1).map(line => {
+      const vals = line.split(",").map(v => v.trim());
+      const obj: any = {};
+      headers.forEach((h, i) => { obj[h] = vals[i] || ""; });
+      return { employeeCode: obj.employee_code, leaveTypeCode: obj.leave_type_code, startDate: obj.start_date, endDate: obj.end_date || obj.start_date, days: obj.days || "1", reason: obj.reason || "", status: obj.status || "approved" };
+    }).filter(r => r.employeeCode && r.startDate && r.leaveTypeCode);
+  }
+
+  function handleFile(e: any) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileName(file.name); setResults(null);
+    const reader = new FileReader();
+    reader.onload = (ev: any) => { setRows(parseCSV(ev.target?.result as string)); };
+    reader.readAsText(file);
+  }
+
+  async function handleSubmit() {
+    if (!rows.length) return;
+    setLoading(true);
+    try {
+      const res = await apiRequest("POST", "/api/leave-requests/bulk-upload", { rows });
+      const data = await res.json();
+      setResults(data.results);
+      toast({ title: `Done: ${data.success} succeeded, ${data.errors} failed` });
+    } catch (e: any) {
+      toast({ title: "Upload failed", description: e.message, variant: "destructive" });
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Leave Bulk Upload</CardTitle>
+          <p className="text-xs text-muted-foreground">Upload a CSV to create leave records for multiple employees. Status defaults to "approved" if not set.</p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={downloadTemplate}>Download CSV Template</Button>
+            <span className="text-xs text-muted-foreground">Columns: employee_code, leave_type_code, start_date, end_date, days, reason, status</span>
+          </div>
+          {leaveTypes && leaveTypes.length > 0 && (
+            <div className="text-xs text-muted-foreground"><strong>Leave type codes:</strong> {leaveTypes.map((lt: any) => lt.code).join(" · ")}</div>
+          )}
+          <div className="text-xs text-muted-foreground"><strong>Status values:</strong> pending · approved</div>
+          <div className="flex items-center gap-3">
+            <label className="cursor-pointer">
+              <input type="file" accept=".csv" className="hidden" onChange={handleFile} />
+              <span className="inline-flex items-center gap-2 px-3 py-2 rounded border border-input bg-background text-sm hover:bg-accent cursor-pointer">Choose CSV File</span>
+            </label>
+            {fileName && <span className="text-sm text-muted-foreground">{fileName} — {rows.length} row(s)</span>}
+          </div>
+          {rows.length > 0 && !results && (
+            <div className="space-y-3">
+              <p className="text-sm font-medium">Preview ({rows.length} rows)</p>
+              <div className="overflow-x-auto rounded border">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>{["Emp Code","Leave Type","Start","End","Days","Reason","Status"].map(h => <th key={h} className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{h}</th>)}</tr>
+                  </thead>
+                  <tbody>
+                    {rows.slice(0, 20).map((r, i) => (
+                      <tr key={i} className="border-t">
+                        <td className="px-3 py-2 font-medium">{r.employeeCode}</td>
+                        <td className="px-3 py-2">{r.leaveTypeCode}</td>
+                        <td className="px-3 py-2">{r.startDate}</td>
+                        <td className="px-3 py-2">{r.endDate}</td>
+                        <td className="px-3 py-2">{r.days}</td>
+                        <td className="px-3 py-2 max-w-[120px] truncate">{r.reason || '-'}</td>
+                        <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded text-xs font-medium ${r.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}`}>{r.status}</span></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {rows.length > 20 && <p className="text-xs text-muted-foreground">Showing first 20 of {rows.length} rows</p>}
+              <Button onClick={handleSubmit} disabled={loading}>{loading ? "Uploading..." : `Upload ${rows.length} Records`}</Button>
+            </div>
+          )}
+          {results && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-1 rounded text-xs font-medium bg-green-100 text-green-700">{results.filter(r => r.success).length} succeeded</span>
+                <span className="px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-700">{results.filter(r => !r.success).length} failed</span>
+                <Button variant="outline" size="sm" onClick={() => { setRows([]); setResults(null); setFileName(""); }}>Upload Another</Button>
+              </div>
+              {results.some(r => !r.success) && (
+                <div className="overflow-x-auto rounded border">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50"><tr>{["Emp Code","Leave Type","Start","Error"].map(h => <th key={h} className="px-3 py-2 text-left text-xs font-medium text-muted-foreground">{h}</th>)}</tr></thead>
+                    <tbody>
+                      {results.filter(r => !r.success).map((r, i) => (
+                        <tr key={i} className="border-t">
+                          <td className="px-3 py-2">{r.employeeCode}</td>
+                          <td className="px-3 py-2">{r.leaveTypeCode}</td>
+                          <td className="px-3 py-2">{r.startDate}</td>
+                          <td className="px-3 py-2 text-red-600">{r.error}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

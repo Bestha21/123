@@ -349,13 +349,27 @@ export default function Reports() {
   const [columnSearch, setColumnSearch] = useState("");
 
   const rawSourceData = useMemo(() => {
+    const empMap = new Map();
+    employees?.forEach(e => empMap.set(e.id, e));
+    const enrichEmp = (rec) => {
+      const emp = empMap.get(rec.employeeId);
+      return {
+        employeeName: emp ? `${emp.firstName} ${emp.lastName || ''}`.trim() : '',
+        employeeCode: emp?.employeeCode || rec.employeeCode || '',
+        email: emp?.email || '',
+        ...rec,
+      };
+    };
     switch (customDataSource) {
       case "employees": return employees || [];
-      case "attendance": return attendanceData || [];
-      case "leaves": return leaveRequests || [];
-      case "payroll": return payrollRecords || [];
-      case "expenses": return expenses || [];
-      case "assets": return assetsData || [];
+      case "attendance": return (attendanceData || []).map(enrichEmp);
+      case "leaves": return (leaveRequests || []).map(enrichEmp);
+      case "payroll": return (payrollRecords || []).map(enrichEmp);
+      case "expenses": return (expenses || []).map(enrichEmp);
+      case "assets": return (assetsData || []).map(rec => {
+        const emp = rec.employeeId ? empMap.get(rec.employeeId) : null;
+        return { employeeName: emp ? `${emp.firstName} ${emp.lastName || ''}`.trim() : '', employeeCode: emp?.employeeCode || '', email: emp?.email || '', ...rec };
+      });
       default: return [];
     }
   }, [customDataSource, employees, attendanceData, leaveRequests, payrollRecords, expenses, assetsData]);
@@ -410,9 +424,10 @@ export default function Reports() {
     const resolveEmployee = (rec: any) => {
       const emp = empMap.get(rec.employeeId);
       return {
-        ...rec,
         employeeName: emp ? `${emp.firstName} ${emp.lastName || ''}`.trim() : '',
         employeeCode: emp?.employeeCode || rec.employeeCode || '',
+        email: emp?.email || '',
+        ...rec,
       };
     };
 
@@ -434,9 +449,10 @@ export default function Reports() {
         return (assetsData || []).map(a => {
           const emp = a.employeeId ? empMap.get(a.employeeId) : null;
           return {
-            ...a,
             employeeName: emp ? `${emp.firstName} ${emp.lastName || ''}`.trim() : '',
             employeeCode: emp?.employeeCode || '',
+            email: emp?.email || '',
+            ...a,
           };
         });
       default:
@@ -1549,7 +1565,7 @@ export default function Reports() {
                         departments?.forEach(d => deptMap.set(d.id, d.name));
                         const resolve = (rec: any) => {
                           const emp = empMap.get(rec.employeeId);
-                          return { ...rec, employeeName: emp ? `${emp.firstName} ${emp.lastName || ''}`.trim() : '', employeeCode: emp?.employeeCode || '' };
+                          return { employeeName: emp ? `${emp.firstName} ${emp.lastName || ''}`.trim() : '', employeeCode: emp?.employeeCode || '', email: emp?.email || '', ...rec };
                         };
                         let records: any[] = [];
                         switch (key) {
@@ -1558,7 +1574,7 @@ export default function Reports() {
                           case "leaves": records = (leaveRequests || []).map(resolve); break;
                           case "payroll": records = (payrollRecords || []).map(resolve); break;
                           case "expenses": records = (expenses || []).map(resolve); break;
-                          case "assets": records = (assetsData || []).map(a => { const emp = a.employeeId ? empMap.get(a.employeeId) : null; return { ...a, employeeName: emp ? `${emp.firstName} ${emp.lastName || ''}`.trim() : '', employeeCode: emp?.employeeCode || '' }; }); break;
+                          case "assets": records = (assetsData || []).map(a => { const emp = a.employeeId ? empMap.get(a.employeeId) : null; return { employeeName: emp ? `${emp.firstName} ${emp.lastName || ''}`.trim() : '', employeeCode: emp?.employeeCode || '', email: emp?.email || '', ...a }; }); break;
                         }
                         exportRecords(records, buildColumnsFromData(records), key, undefined, undefined, "Full");
                       }}

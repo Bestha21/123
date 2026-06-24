@@ -5,18 +5,19 @@ import { preloadPage } from "@/lib/pagePreload";
 import { 
   LayoutDashboard, Users, UserPlus, ClipboardCheck, CalendarRange, DollarSign, 
   LogOut, Receipt, Laptop, UserX, Bell, Building2, CalendarDays, FileText, 
-  Network, GitBranch, Contact, BarChart3, UserCheck,UserCircle, FileSpreadsheet, Plug, 
+  Network, GitBranch, Contact, BarChart3, UserCheck, UserCircle, FileSpreadsheet, Plug, 
   Target, GraduationCap, Heart, Plane, FolderKanban, Package, Briefcase, 
-  FileCheck, Banknote, Scale, BookOpen, Clock, Layers, ChevronDown, Menu, X
+  FileCheck, Banknote, Scale, BookOpen, Clock, Layers, ChevronDown, Menu, X,
+  ShieldAlert
 } from "lucide-react";
 import { useAuth } from "@/hooks/use-auth";
 import { useQuery } from "@tanstack/react-query";
 import type { Employee } from "@shared/schema";
 import { useEntity } from "@/lib/entityContext";
 
-const SidebarContext = createContext<{ isOpen: boolean; setIsOpen: (v: boolean) => void }>({ isOpen: false, setIsOpen: () => {} });
+const SidebarContext = createContext({ isOpen: false, setIsOpen: () => {} });
 export function useSidebar() { return useContext(SidebarContext); }
-export function SidebarProvider({ children }: { children: React.ReactNode }) {
+export function SidebarProvider({ children }) {
   const [isOpen, setIsOpen] = useState(false);
   return <SidebarContext.Provider value={{ isOpen, setIsOpen }}>{children}</SidebarContext.Provider>;
 }
@@ -36,22 +37,22 @@ export function MobileHeader() {
 
 export function Sidebar() {
   const [location] = useLocation();
-  const { logout, user } = useAuth();
+  const { logout, user, isImpersonating, originalAdmin, stopImpersonation, isStoppingImpersonation } = useAuth();
   const { entities, selectedEntityId, selectedEntityIds, setSelectedEntityId, setSelectedEntityIds } = useEntity();
   const [entityDropdownOpen, setEntityDropdownOpen] = useState(false);
-  const entityDropdownRef = useRef<HTMLDivElement>(null);
+  const entityDropdownRef = useRef(null);
 
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (entityDropdownRef.current && !entityDropdownRef.current.contains(e.target as Node)) {
+    const handleClickOutside = (e) => {
+      if (entityDropdownRef.current && !entityDropdownRef.current.contains(e.target)) {
         setEntityDropdownOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const { data: employees = [] } = useQuery<Employee[]>({
+  const { data: employees = [] } = useQuery({
     queryKey: ["/api/employees", "all"],
     queryFn: async () => {
       const res = await fetch("/api/employees", { credentials: "include" });
@@ -64,7 +65,7 @@ export function Sidebar() {
   const accessRoleString = currentEmployee?.accessRole || "employee";
   const userAccessRoles = accessRoleString.split(",").map(role => role.trim().toLowerCase());
 
-  const hasRole = (role: string) => userAccessRoles.includes(role);
+  const hasRole = (role) => userAccessRoles.includes(role);
   const isAdmin = hasRole("admin");
   const isHrManager = hasRole("hr_manager");
   const isLeadership = hasRole("leadership");
@@ -73,8 +74,6 @@ export function Sidebar() {
   const isPayrollTeam = hasRole("payroll_team");
   const isProjectTeam = hasRole("project_team");
   const isOnboardingTeam = hasRole("onboarding_team");
-  const isPmsTeam = hasRole("pms_team");
-  const isLmsTeam = hasRole("lms_team");
   const canSwitchEntity = isAdmin || isHrManager || isPayrollTeam || isProjectTeam || isOnboardingTeam || isManager || isLeadership || hasRole("hr") || hasRole("finance");
 
   useEffect(() => {
@@ -86,7 +85,6 @@ export function Sidebar() {
   }, [currentEmployee, canSwitchEntity, selectedEntityId, setSelectedEntityId]);
 
   const hasHrAccess = isAdmin || isHrManager;
-
   const mainLinks = hasHrAccess ? [{ href: "/", label: "Dashboard", icon: LayoutDashboard }] : [];
 
   const hrDatabaseLinks = hasHrAccess ? [
@@ -137,7 +135,7 @@ export function Sidebar() {
     ...(hasHrAccess ? [{ href: "/assets", label: "Assets", icon: Laptop }] : []),
     ...(hasHrAccess || isOnboardingTeam ? [{ href: "/onboarding", label: "Onboarding", icon: UserPlus }] : []),
     ...(hasHrAccess ? [{ href: "/exit", label: "Exit Management", icon: UserX }] : []),
-	...(hasHrAccess ? [{ href: "/profile-change-requests", label: "Profile Change Requests", icon: UserCheck }] : []),
+    ...(hasHrAccess ? [{ href: "/profile-change-requests", label: "Profile Change Requests", icon: UserCheck }] : []),
     ...(hasHrAccess ? [{ href: "/announcements", label: "Announcements", icon: Bell }] : []),
     ...(hasHrAccess ? [{ href: "/company-policies", label: "Company Policies", icon: BookOpen }] : []),
     ...(isAdmin ? [{ href: "/entity-management", label: "Entity Management", icon: Layers }] : []),
@@ -155,31 +153,20 @@ export function Sidebar() {
     { href: "/team/onboarding", label: "Onboarding Team", icon: UserPlus, role: "onboarding_team" },
   ];
 
-  const teamDashboardLinks = isAdmin 
-    ? allTeamDashboardLinks 
-    : allTeamDashboardLinks.filter(link => userAccessRoles.includes(link.role));
+  const teamDashboardLinks = isAdmin ? allTeamDashboardLinks : allTeamDashboardLinks.filter(link => userAccessRoles.includes(link.role));
 
-  const renderLinks = (links: typeof mainLinks, title: string) => (
+  const renderLinks = (links, title) => (
     <div className="mb-4">
       <p className="px-3 text-xs font-semibold uppercase tracking-wider mb-2 text-[hsl(var(--sidebar-section))]">{title}</p>
       {links.map((link) => {
         const Icon = link.icon;
         const isActive = location === link.href;
         return (
-           <Link 
-            key={link.href} 
-            href={link.href} 
-            data-testid={`link-${link.label.toLowerCase().replace(/\s+/g, '-')}`}
-            onMouseEnter={() => preloadPage(link.href)}
-            onFocus={() => preloadPage(link.href)}
-            onTouchStart={() => preloadPage(link.href)}
-            className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-              isActive 
-                ? 'bg-[hsl(var(--sidebar-active-bg))] text-[hsl(var(--sidebar-active-fg))]' 
-                : 'text-[hsl(var(--sidebar-fg-muted))] hover:bg-[hsl(var(--sidebar-hover-bg))] hover:text-[hsl(var(--sidebar-fg))]'
-            }`}
+          <Link key={link.href} href={link.href} data-testid={"link-" + link.label.toLowerCase().replace(/\s+/g, "-")}
+            onMouseEnter={() => preloadPage(link.href)} onFocus={() => preloadPage(link.href)} onTouchStart={() => preloadPage(link.href)}
+            className={"flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-all " + (isActive ? "bg-[hsl(var(--sidebar-active-bg))] text-[hsl(var(--sidebar-active-fg))]" : "text-[hsl(var(--sidebar-fg-muted))] hover:bg-[hsl(var(--sidebar-hover-bg))] hover:text-[hsl(var(--sidebar-fg))]")}
           >
-            <Icon className={`w-4 h-4 ${isActive ? 'text-[hsl(var(--sidebar-active-fg))]' : 'text-[hsl(var(--sidebar-icon))]'}`} />
+            <Icon className={"w-4 h-4 " + (isActive ? "text-[hsl(var(--sidebar-active-fg))]" : "text-[hsl(var(--sidebar-icon))]")} />
             {link.label}
           </Link>
         );
@@ -188,22 +175,19 @@ export function Sidebar() {
   );
 
   const { isOpen, setIsOpen } = useSidebar();
-
   useEffect(() => { setIsOpen(false); }, [location]);
 
   return (
     <>
       {isOpen && (<div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setIsOpen(false)} />)}
-      <aside className={`w-64 h-screen flex flex-col fixed left-0 top-0 z-50 transition-transform duration-300 ease-in-out border-r bg-[hsl(var(--sidebar-bg))] border-[hsl(var(--sidebar-border))] ${isOpen ? 'translate-x-0' : '-translate-x-full'} lg:translate-x-0 lg:z-30`}>
+      <aside className={"w-64 h-screen flex flex-col fixed left-0 top-0 z-50 transition-transform duration-300 ease-in-out border-r bg-[hsl(var(--sidebar-bg))] border-[hsl(var(--sidebar-border))] " + (isOpen ? "translate-x-0" : "-translate-x-full") + " lg:translate-x-0 lg:z-30"}>
         <div className="p-4 border-b border-[hsl(var(--sidebar-border))] flex items-center gap-3">
           <button onClick={() => setIsOpen(false)} className="lg:hidden p-1 rounded-lg hover:bg-[hsl(var(--sidebar-hover-bg))] mr-1" data-testid="button-close-sidebar">
             <X className="w-5 h-5 text-[hsl(var(--sidebar-fg-muted))]" />
           </button>
           {(() => {
             const selectedEntity = entities.find(e => e.id === selectedEntityId);
-            if (selectedEntity?.logoUrl) {
-              return <img src={selectedEntity.logoUrl} alt={selectedEntity.name} className="h-10 w-auto" />;
-            }
+            if (selectedEntity?.logoUrl) return <img src={selectedEntity.logoUrl} alt={selectedEntity.name} className="h-10 w-auto" />;
             return <span className="font-bold text-xl text-[hsl(var(--sidebar-active-fg))]">Kadenc</span>;
           })()}
           <div>
@@ -215,46 +199,25 @@ export function Sidebar() {
         {entities.length > 0 && (
           <div className="px-3 py-2 border-b border-[hsl(var(--sidebar-border))]">
             <div className="relative" ref={entityDropdownRef}>
-              <button
-                type="button"
-                onClick={() => canSwitchEntity && setEntityDropdownOpen(!entityDropdownOpen)}
-                disabled={!canSwitchEntity}
-                className={`w-full flex items-center justify-between bg-[hsl(var(--sidebar-hover-bg))] border border-[hsl(var(--sidebar-border))] rounded-lg px-3 py-2 text-sm font-medium text-[hsl(var(--sidebar-fg))] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary ${canSwitchEntity ? 'cursor-pointer' : 'cursor-not-allowed opacity-75'}`}
-                data-testid="select-entity-filter"
-              >
+              <button type="button" onClick={() => canSwitchEntity && setEntityDropdownOpen(!entityDropdownOpen)} disabled={!canSwitchEntity}
+                className={"w-full flex items-center justify-between bg-[hsl(var(--sidebar-hover-bg))] border border-[hsl(var(--sidebar-border))] rounded-lg px-3 py-2 text-sm font-medium text-[hsl(var(--sidebar-fg))] focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary " + (canSwitchEntity ? "cursor-pointer" : "cursor-not-allowed opacity-75")}
+                data-testid="select-entity-filter">
                 <span className="truncate">
-                  {selectedEntityIds.length === 0 ? 'All Entities' :
-                   selectedEntityIds.length === 1 ? entities.find(e => e.id === selectedEntityIds[0])?.name || 'Entity' :
-                   `${selectedEntityIds.length} Entities`}
+                  {selectedEntityIds.length === 0 ? "All Entities" : selectedEntityIds.length === 1 ? entities.find(e => e.id === selectedEntityIds[0])?.name || "Entity" : selectedEntityIds.length + " Entities"}
                 </span>
-                <ChevronDown className={`w-4 h-4 text-[hsl(var(--sidebar-fg-muted))] transition-transform ${entityDropdownOpen ? 'rotate-180' : ''}`} />
+                <ChevronDown className={"w-4 h-4 text-[hsl(var(--sidebar-fg-muted))] transition-transform " + (entityDropdownOpen ? "rotate-180" : "")} />
               </button>
               {entityDropdownOpen && canSwitchEntity && (
                 <div className="absolute z-50 mt-1 w-full bg-white border border-slate-200 rounded-lg shadow-lg py-1 max-h-60 overflow-y-auto">
                   <label className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm font-medium text-slate-700 border-b border-slate-100">
-                    <input
-                      type="checkbox"
-                      checked={selectedEntityIds.length === 0}
-                      onChange={() => setSelectedEntityIds([])}
-                      className="rounded border-slate-300 text-primary focus:ring-primary/30"
-                    />
+                    <input type="checkbox" checked={selectedEntityIds.length === 0} onChange={() => setSelectedEntityIds([])} className="rounded border-slate-300 text-primary focus:ring-primary/30" />
                     All Entities
                   </label>
                   {entities.map(entity => (
                     <label key={entity.id} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 cursor-pointer text-sm text-slate-700">
-                      <input
-                        type="checkbox"
-                        checked={selectedEntityIds.includes(entity.id)}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setSelectedEntityIds([...selectedEntityIds, entity.id]);
-                          } else {
-                            const next = selectedEntityIds.filter(id => id !== entity.id);
-                            setSelectedEntityIds(next);
-                          }
-                        }}
-                        className="rounded border-slate-300 text-primary focus:ring-primary/30"
-                      />
+                      <input type="checkbox" checked={selectedEntityIds.includes(entity.id)}
+                        onChange={(e) => { if (e.target.checked) { setSelectedEntityIds([...selectedEntityIds, entity.id]); } else { setSelectedEntityIds(selectedEntityIds.filter(id => id !== entity.id)); } }}
+                        className="rounded border-slate-300 text-primary focus:ring-primary/30" />
                       {entity.name} ({entity.code})
                     </label>
                   ))}
@@ -275,21 +238,33 @@ export function Sidebar() {
           {reportsLinks.length > 0 && renderLinks(reportsLinks, "Reports")}
         </div>
 
+        {isImpersonating && (
+          <div className="mx-3 mb-2 px-3 py-2 bg-orange-500 rounded-lg">
+            <div className="flex items-center gap-2 mb-1">
+              <ShieldAlert className="w-4 h-4 text-white shrink-0" />
+              <span className="text-xs font-bold text-white">Viewing as employee</span>
+            </div>
+            <p className="text-xs text-orange-100 mb-2">Admin: {originalAdmin}</p>
+            <button onClick={() => stopImpersonation()} disabled={isStoppingImpersonation}
+              className="w-full text-xs font-semibold bg-white text-orange-600 hover:bg-orange-50 rounded px-2 py-1.5 transition-colors">
+              {isStoppingImpersonation ? "Returning..." : "↩ Return to Admin"}
+            </button>
+          </div>
+        )}
+
         <div className="p-3 border-t border-[hsl(var(--sidebar-border))] bg-[hsl(var(--sidebar-footer-bg))]">
           <div className="flex items-center gap-3 mb-2">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary/70 overflow-hidden flex items-center justify-center text-white font-bold text-sm">
-              {user?.firstName?.[0] || 'U'}{user?.lastName?.[0] || ''}
+              {user?.firstName?.[0] || "U"}{user?.lastName?.[0] || ""}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold truncate text-[hsl(var(--sidebar-fg))]">
-                {user?.firstName} {user?.lastName}
-              </p>
+              <p className="text-sm font-semibold truncate text-[hsl(var(--sidebar-fg))]">{user?.firstName} {user?.lastName}</p>
               <p className="text-xs truncate text-[hsl(var(--sidebar-fg-muted))]">{user?.email}</p>
               {currentEmployee && (
                 <div className="flex flex-wrap gap-1 mt-1">
                   {userAccessRoles.map((role, idx) => (
                     <span key={idx} className="inline-block px-2 py-0.5 text-xs font-medium bg-primary/10 text-primary rounded-full capitalize">
-                      {role.replace(/_/g, ' ')}
+                      {role.replace(/_/g, " ")}
                     </span>
                   ))}
                 </div>
@@ -297,11 +272,8 @@ export function Sidebar() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button 
-              onClick={() => logout()}
-              data-testid="button-logout"
-              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors font-medium"
-            >
+            <button onClick={() => logout()} data-testid="button-logout"
+              className="flex-1 flex items-center justify-center gap-2 px-3 py-2 text-sm text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors font-medium">
               <LogOut className="w-4 h-4" />
               Sign Out
             </button>
